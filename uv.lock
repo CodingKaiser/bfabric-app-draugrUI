@@ -2,6 +2,9 @@ version = 1
 revision = 2
 requires-python = ">=3.12"
 
+[manifest]
+overrides = [{ name = "suds", marker = "python_full_version < '0'", url = "https://files.pythonhosted.org/packages/c4/43/658bd1825a5f58c1182269eaa6165084d8d95e031cd7e34a2a1bcf773579/suds-1.2.0-py3-none-any.whl" }]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -33,7 +36,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },
-    { name = "suds" },
     { name = "zeep" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/69/d2/bfc410c687568a7c00f9a47b8b5e2e2fcb6156e018ea55b06f968cd37364/bfabric-1.13.36.tar.gz", hash = "sha256:8b33742c4e44eee4414ae003e3b8e76c4cbbbc533a5b673fcdaa2a2ab3867ad9", size = 60785, upload-time = "2025-10-27T10:16:42.515Z" }
@@ -856,15 +858,6 @@ name = "slugify"
 version = "0.0.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7b/89/fbb7391d777b60c82d4e1376bb181b98e75adf506b3f7ffe837eca64570b/slugify-0.0.1.tar.gz", hash = "sha256:c5703cc11c1a6947536f3ce8bb306766b8bb5a84a53717f5a703ce0f18235e4c", size = 1156, upload-time = "2010-12-07T16:36:05.53Z" }
-
-[[package]]
-name = "suds"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3e/a1/c3783be8de318678c822d6edf9855729c528ba06ac9004398c225ecf2dbd/suds-1.2.0.tar.gz", hash = "sha256:83b162c3d2355374e11d8b9acf15eeaa158b416b4625821844f9f628d679deaf", size = 271331, upload-time = "2024-08-24T20:07:28.95Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/43/658bd1825a5f58c1182269eaa6165084d8d95e031cd7e34a2a1bcf773579/suds-1.2.0-py3-none-any.whl", hash = "sha256:2cf8ed43ed8a0df350027c741f5295d6be8443d4e820cb36f2c17b033e331d5b", size = 145151, upload-time = "2024-08-24T20:07:27.206Z" },
-]
 
 [[package]]
 name = "suds-py3"

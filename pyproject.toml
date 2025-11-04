@@ -39,3 +39,10 @@ dependencies = [
     "wheel>=0.45.1",
     "zipp>=3.23.0",
 ]
+
+[tool.uv]
+# Prevent installation of the old suds package by making its version requirement unsatisfiable
+# bfabric requires suds, but we use suds-py3 which provides the same module
+override-dependencies = [
+    "suds @ https://files.pythonhosted.org/packages/c4/43/658bd1825a5f58c1182269eaa6165084d8d95e031cd7e34a2a1bcf773579/suds-1.2.0-py3-none-any.whl ; python_version < '0'",
+]
