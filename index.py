@@ -524,4 +524,4 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
     return None, False, False, False, False
 
 if __name__ == '__main__':
-    app.run_server(debug=False, port=PORT, host=HOST)
+    app.run(debug=False, port=PORT, host=HOST)
