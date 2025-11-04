@@ -2,11 +2,11 @@
 import requests
 import json
 import datetime
-from dash import html
-import dash_bootstrap_components as dbc
+
+from bfabric.config.config_data import ConfigData
 import os
 import bfabric
-from bfabric import BfabricAuth
+from bfabric import BfabricAuth, Bfabric
 from bfabric import BfabricClientConfig
 from .objects import Logger
 
@@ -44,7 +44,8 @@ def token_to_data(token: str) -> str:
         if not five_minutes_later <= datetime.datetime.strptime(expiry_time, "%Y-%m-%d %H:%M:%S"):
             return "EXPIRED"
         
-        environment_dict = {"Production":"https://fgcz-bfabric.uzh.ch/bfabric","Test":"https://fgcz-bfabric-test.uzh.ch/bfabric"}
+        environment_dict = {"PRODUCTION": "https://fgcz-bfabric.uzh.ch/bfabric",
+                            "TEST": "https://fgcz-bfabric-test.uzh.ch/bfabric"}
 
         token_data = dict(
             environment = userinfo['environment'],
@@ -63,12 +64,12 @@ def token_to_data(token: str) -> str:
         return json.dumps(token_data)
     
 
-def token_response_to_bfabric(token_response: dict) -> str:
+def token_response_to_bfabric(token_response: dict) -> Bfabric:
 
     bfabric_auth = BfabricAuth(login=token_response.get('user_data'), password=token_response.get('userWsPassword'))
-    bfabric_client_config = BfabricClientConfig(base_url=token_response.get('webbase_data')) 
-
-    bfabric_wrapper = bfabric.Bfabric(config=bfabric_client_config, auth=bfabric_auth)
+    bfabric_client_config = BfabricClientConfig(base_url=token_response.get('webbase_data'))
+    config_data = ConfigData(client=bfabric_client_config, auth=bfabric_auth)
+    bfabric_wrapper = bfabric.Bfabric(config_data=config_data)
 
     return bfabric_wrapper
 
@@ -100,9 +101,8 @@ def entity_data(token_data: dict) -> str:
 
     sample_lanes = {}
 
+    L = Logger(jobid=jobId, username=username)
     if wrapper and entity_class and endpoint and entity_id:
-
-        L = Logger(jobid=jobId, username=username)
 
         entity_data_list = L.logthis(
             api_call=wrapper.read,
