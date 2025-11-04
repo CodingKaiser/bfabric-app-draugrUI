@@ -33,7 +33,7 @@ class Logger:
         # Pickle the object and then encode it as a base64 string
         return {"data": base64.b64encode(pickle.dumps(self)).decode('utf-8')}
 
-    @classmethod 
+    @classmethod
     def from_pickle(cls, pickle_object):
         # Decode the base64 string back to bytes and then unpickle
         return pickle.loads(base64.b64decode(pickle_object.get("data").encode('utf-8')))
@@ -48,7 +48,7 @@ class Logger:
 
         # Build the base log entry
         log_entry = (
-            f"[{timestamp}] "      
+            f"[{timestamp}] "
             f"USER: {self.username} | "
             f"OPERATION: {operation.upper()} | "
             f"MESSAGE: {message}"

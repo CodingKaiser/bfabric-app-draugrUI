@@ -3,14 +3,14 @@ import subprocess
 
 def generate_draugr_command(
     server,
-    run_folder, 
-    order_list, 
-    skip_gstore=False, 
-    disable_wizard=False, 
-    test_mode=False, 
-    is_multiome=False, 
-    bcl_flags=None, 
-    cellranger_flags=None, 
+    run_folder,
+    order_list,
+    skip_gstore=False,
+    disable_wizard=False,
+    test_mode=False,
+    is_multiome=False,
+    bcl_flags=None,
+    cellranger_flags=None,
     bases2fastq_flags=None
 ):
     """
@@ -51,7 +51,7 @@ def generate_draugr_command(
         draugr_command += " --custom-cellranger-flags " + cellranger_flags
     if bases2fastq_flags:
         draugr_command += " --custom-bases2fastq_flags " + bases2fastq_flags
-    
+
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
     SET_ENVIRON = "export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
@@ -64,7 +64,7 @@ def generate_draugr_command(
 
     system_call = f"ssh illumina@{server} '{PREFIX} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
     TEST_SYSTEM_CALL = f"ssh illumina@{TEST_SERVER} '{PREFIX} && nohup {TEST_COMMAND} &> /export/local/data/draugrUI/output.log &' &> output.log"
-    
+
     # inot line 123 generat_sushi_command fastq in generate_sushi_command 
     # 
     # change to just operation gget executet
@@ -82,10 +82,10 @@ def check_if_file_exists(ssh_command):
         return False
 
 def generate_sushi_command(
-    order_list, 
-    run_name
+        order_list,
+        run_name
 ):
-    
+
     """
     Generate a command string for the Sushi pipeline.
 
@@ -100,7 +100,7 @@ def generate_sushi_command(
     ssh_login = "trxcopy@fgcz-h-082"
     remote_path = "/srv/GT/analysis/datasets"
 
-    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{run_name}*'"  
+    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{run_name}*'"
     check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{run_name}*'"
     check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{run_name}*'"
 
@@ -110,18 +110,18 @@ def generate_sushi_command(
 
     if not in_orig and not in_proc and not in_iseq:
         return False, False
-    
+
     order_string = "|".join([str(elt) for elt in order_list]).replace("|", "\\|")
 
-    if in_orig: 
+    if in_orig:
         generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     elif in_iseq:
         generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/ISeq/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
-    else: 
+    else:
         generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
 
     execute_bash_script = f'''ssh trxcopy@fgcz-h-082 "nohup bash -lc 'cd /srv/sushi/production/master && bash /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
-    
+
     # if in_orig:
     #     ssh_command = f'''ssh trxcopy@fgcz-h-031 "nohup bash -lc 'cd /srv/sushi/production/master && grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u | bash -s &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
     # else:

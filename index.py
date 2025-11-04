@@ -22,7 +22,7 @@ else:
     PORT = 8050
     HOST = 'localhost'
     DEV = True
-    
+
 
 ####### Main components of a Dash App: ########
 # 1) app (dash.Dash())
@@ -47,7 +47,7 @@ app.layout = html.Div(
             refresh=False
         ),
         dbc.Container(
-            children=[    
+            children=[
                 dbc.Row(
                     dbc.Col(
                         html.Div(
@@ -107,9 +107,9 @@ app.layout = html.Div(
                             ),
                             dbc.Alert(
                                 "Failed to submit bug report! Please email the developers directly at the email below!",
-                                id="alert-fade-3-fail", 
+                                id="alert-fade-3-fail",
                                 dismissable=True,
-                                is_open=False, 
+                                is_open=False,
                                 color="danger",
                                 style={"max-width":"50vw", "margin":"10px"}
                             ),
@@ -125,7 +125,7 @@ app.layout = html.Div(
                     )
                 ),
                 components.tabs,
-            ], style={"width":"100vw"},  
+            ], style={"width":"100vw"},
             fluid=True
         ),
         dcc.Store(id='token', storage_type='session'), # Where we store the actual token
@@ -135,14 +135,14 @@ app.layout = html.Div(
             """Custom bcl2fastq flags to use for the standard samples wrapped in a
                 string, with arguments separated by '|' characters, E.g. "--barcode-
                 mismatches 2|--minimum-trimmed-read-length" """,
-                target="bcl-input",
+            target="bcl-input",
         ),
         dbc.Tooltip(
             """Custom cellranger mkfastq flags to use for the 10x samples wrapped in a
                         string, with arguments separated by '|' characters, E.g. "--barcode-
                         mismatches 2|--delete-undetermined"
                  """,
-                target="cellranger-input",
+            target="cellranger-input",
         ),
         dbc.Tooltip(
             """Custom bases2fastq flags to use wrapped in a string, with arguments
@@ -201,42 +201,42 @@ app.layout = html.Div(
     ]
 )
 def display_page(url_params):
-    
+
     base_title = " "
 
     if not url_params:
         return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
-    
+
     token = "".join(url_params.split('token=')[1:])
     tdata_raw = auth_utils.token_to_data(token)
-    
+
     if tdata_raw:
         if tdata_raw == "EXPIRED":
             return None, None, None, components.expired, components.expired, components.expired, base_title, True, True, True, True, True, True, True, True, True, True, True
 
-        else: 
+        else:
             tdata = json.loads(tdata_raw)
     else:
         return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
-    
+
     if tdata:
         entity_data = json.loads(auth_utils.entity_data(tdata))
         page_title = f"{tdata['entityClass_data']} - {entity_data['name']}" if tdata else "B-Fabric App Interface"
 
         if not tdata:
             return token, None, None, components.no_auth, components.no_auth, components.no_auth, page_title, True, True, True, True, True, True, True, True, True, True, True
-        
+
         elif not entity_data:
             return token, None, None, components.no_entity, components.no_entity, components.no_entity, page_title, True, True, True, True, True, True, True, True, True, True, True
-        
+
         else:
             if not DEV:
                 return token, tdata, entity_data, components.auth, components.auth2, components.auth3, page_title, False, False, False, False, False, False, False, False, False, False, False
-            else: 
+            else:
                 return token, tdata, entity_data, components.dev, components.dev, components.dev, page_title, True, True, True, True, True, True, True, True, True, True, True
-    else: 
+    else:
         return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
-    
+
 @app.callback(
     Output('draugr-dropdown', 'options'),
     [Input('entity', 'data')],
@@ -262,7 +262,7 @@ def update_dropdown(entity_data):
          Output('auth-div2', 'children'),
          Output('auth-div3', 'children'),
          Output('session-details', 'children'),
-    ],
+         ],
     [
         Input("entity", "data"),
     ],
@@ -274,7 +274,7 @@ def update_auth_div(entity_data, token):
 
     token_data = json.loads(auth_utils.token_to_data(token))
 
-    if not entity_data: 
+    if not entity_data:
         session_details = [html.P("No session details available.")]
     else:
         session_details = [
@@ -341,7 +341,7 @@ def update_auth_div(entity_data, token):
                 )
             ]
         )
-    
+
     return container, functionality_disabled, container, session_details
 
 @app.callback(
@@ -382,7 +382,7 @@ def toggle_modal(n1, n2, is_open):
 
 def submit_bug_report(n_clicks, token, entity_data, bug_description):
 
-    if token: 
+    if token:
         token_data = json.loads(auth_utils.token_to_data(token))
     else:
         token_data = ""
@@ -416,7 +416,7 @@ def submit_bug_report(n_clicks, token, entity_data, bug_description):
 
 @app.callback(
     [
-        Output("empty-div-1", "children"), 
+        Output("empty-div-1", "children"),
         Output("alert-fade", "is_open"),
         Output("alert-fade-2", "is_open"),
         Output("alert-fade-2-fail", "is_open"),
@@ -465,11 +465,11 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
             cellranger_flags=cellranger_flags,
             bases2fastq_flags=bases2fastq_flags
         )
-        
+
         print("DRAUGR COMMAND:")
         print(draugr_command)
         os.system(draugr_command)
-        
+
         L.log_operation(
             operation="execute",
             message="DMX execution",
@@ -480,7 +480,7 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
         )
 
         return None, True, False, False, False
-    
+
     elif button_clicked == "close2":
         if not orders2:
             return None, False, False, False, True
@@ -492,7 +492,7 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
                 order_list=orders2,
                 run_name=entity_data['name']
             )
-        except: 
+        except:
             draugr_command1, draugr_command2 = None, None
 
         if not draugr_command1:
@@ -506,7 +506,7 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
         print(draugr_command2)
 
         os.system(draugr_command1)
-        time.sleep(1) 
+        time.sleep(1)
         os.system(draugr_command2)
 
         L.log_operation(

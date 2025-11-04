@@ -14,25 +14,25 @@ from .objects import Logger
 VALIDATION_URL = "https://fgcz-bfabric.uzh.ch/bfabric/rest/token/validate?token="
 HOST = "fgcz-bfabric.uzh.ch"
 
-def token_to_data(token: str) -> str: 
+def token_to_data(token: str) -> str:
 
     if not token:
         return None
 
     validation_url = VALIDATION_URL + token
     res = requests.get(validation_url, headers={"Host": HOST})
-    
+
     if res.status_code != 200:
         res = requests.get(validation_url)
-    
+
         if res.status_code != 200:
             return None
     try:
         master_data = json.loads(res.text)
     except:
         return None
-    
-    if True: 
+
+    if True:
 
         userinfo = json.loads(res.text)
         expiry_time = userinfo['expiryDateTime']
@@ -43,7 +43,7 @@ def token_to_data(token: str) -> str:
 
         if not five_minutes_later <= datetime.datetime.strptime(expiry_time, "%Y-%m-%d %H:%M:%S"):
             return "EXPIRED"
-        
+
         environment_dict = {"PRODUCTION": "https://fgcz-bfabric.uzh.ch/bfabric",
                             "TEST": "https://fgcz-bfabric-test.uzh.ch/bfabric"}
 
@@ -62,7 +62,7 @@ def token_to_data(token: str) -> str:
 
 
         return json.dumps(token_data)
-    
+
 
 def token_response_to_bfabric(token_response: dict) -> Bfabric:
 
@@ -123,11 +123,11 @@ def entity_data(token_data: dict) -> str:
         #lane_data_list = wrapper.read(endpoint="rununit", obj={"id": str(rununit_id)}, max_results=None)
 
         lane_data_list = L.logthis(
-                    api_call=wrapper.read,
-                    endpoint="rununit",
-                    obj={"id": str(rununit_id)},
-                    max_results=None,
-                    flush_logs = False
+            api_call=wrapper.read,
+            endpoint="rununit",
+            obj={"id": str(rununit_id)},
+            max_results=None,
+            flush_logs = False
         )
 
         if not lane_data_list:
@@ -148,7 +148,7 @@ def entity_data(token_data: dict) -> str:
             samples = []
             sample_ids = [str(elt["id"]) for elt in lane.get("sample", [])]
             if len(sample_ids) < 100:
-                
+
                 #samples = wrapper.read(endpoint="sample", obj={"id": sample_ids}, max_results=None)
                 samples = L.logthis(
                     api_call=wrapper.read,
@@ -160,7 +160,7 @@ def entity_data(token_data: dict) -> str:
 
             else:
                 for i in range(0, len(sample_ids), 100):
-                    
+
                     #samples += wrapper.read(endpoint="sample", obj={"id": sample_ids[i:i+100]}, max_results=None)
                     samples += L.logthis(
                         api_call=wrapper.read,
@@ -173,7 +173,7 @@ def entity_data(token_data: dict) -> str:
             container_ids = list(set([sample.get("container", {}).get("id") for sample in samples if sample.get("container")]))
             sample_lanes[str(lane.get("position"))] = [f"{container_id} {L.logthis(api_call=wrapper.read,endpoint='container', obj={'id': str(container_id)}, max_results=None, flush_logs=True )[0].get('name', '')}"
                                                        for container_id in container_ids
-        ]
+                                                       ]
     else:
         L.flush_logs()
         return json.dumps({})
