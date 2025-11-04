@@ -1,6 +1,4 @@
 import subprocess
-from .objects import Logger
-import datetime
 
 
 def generate_draugr_command(

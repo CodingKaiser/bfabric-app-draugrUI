@@ -1,6 +1,5 @@
 import os
 import pickle
-from typing import List
 from bfabric import Bfabric
 from datetime import datetime as dt
 import base64
