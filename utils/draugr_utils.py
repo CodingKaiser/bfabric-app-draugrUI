@@ -1,4 +1,7 @@
 import subprocess
+from .objects import Logger
+import datetime
+
 
 def generate_draugr_command(
     server,
@@ -63,6 +66,12 @@ def generate_draugr_command(
 
     system_call = f"ssh illumina@{server} '{PREFIX} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
     TEST_SYSTEM_CALL = f"ssh illumina@{TEST_SERVER} '{PREFIX} && nohup {TEST_COMMAND} &> /export/local/data/draugrUI/output.log &' &> output.log"
+    
+    # inot line 123 generat_sushi_command fastq in generate_sushi_command 
+    # 
+    # change to just operation gget executet
+    # params empty
+    # add the string we send to the server.   
 
     # return system_call
     return system_call
@@ -90,7 +99,7 @@ def generate_sushi_command(
         str: Command string for the Sushi pipeline.
     """
 
-    ssh_login = "trxcopy@fgcz-h-036"
+    ssh_login = "trxcopy@fgcz-h-082"
     remote_path = "/srv/GT/analysis/datasets"
 
     check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{run_name}*'"  
@@ -107,17 +116,17 @@ def generate_sushi_command(
     order_string = "|".join([str(elt) for elt in order_list]).replace("|", "\\|")
 
     if in_orig: 
-        generate_bash_script = f'''ssh trxcopy@fgcz-h-036 "grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     elif in_iseq:
-        generate_bash_script = f'''ssh trxcopy@fgcz-h-036 "grep '{order_string}' /srv/GT/analysis/datasets/ISeq/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/ISeq/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     else: 
-        generate_bash_script = f'''ssh trxcopy@fgcz-h-036 "grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh trxcopy@fgcz-h-082 "grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
 
-    execute_bash_script = f'''ssh trxcopy@fgcz-h-036 "nohup bash -lc 'cd /srv/sushi/production/master && bash /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
+    execute_bash_script = f'''ssh trxcopy@fgcz-h-082 "nohup bash -lc 'cd /srv/sushi/production/master && bash /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
     
     # if in_orig:
     #     ssh_command = f'''ssh trxcopy@fgcz-h-031 "nohup bash -lc 'cd /srv/sushi/production/master && grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u | bash -s &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
     # else:
     #     ssh_command = f'''ssh trxcopy@fgcz-h-031 "nohup bash -lc 'cd /srv/sushi/production/master && grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u | bash -s &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
-    
+
     return generate_bash_script, execute_bash_script
