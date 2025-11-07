@@ -3,15 +3,15 @@ Template Application for Bfabric Webapp Concept (written in Python3)
 
 ## Deployment 
 
-1) Fork the Repo 
+### 1) Fork the Repo 
 
-2) Clone your Repo
+### 2) Clone your Repo
 
 ```shell
-git clone https://github.com/your/bfabric-app-template/fork.git && cd bfabric-app-template
+git clone https://github.com/CodingKaiser/bfabric-app-draugrUI.git && cd bfabric-app-draugrUI
 ```
 
-3) Installing dependencies
+### 3) Installing dependencies
 
 #### Option #1: Use `uv` (**recommended**)
 
@@ -23,25 +23,25 @@ uv sync
 
 #### Option #2: Set up virtual environment & install requirements
 
-3.1) 
+3.1) Set up your virtual env
 
 For using virtualenv: 
 ```shell
-python3 -m venv my_app_1
-source my_app_1/bin/activate
+python3 -m venv gi_bfabric-app-draugrUI
+source gi_bfabric-app-draugrUI/bin/activate
 ```
 
 For using conda: 
 
 ```shell
-conda create -n my_app_1 pip
-conda activate my_app_1
+conda create -n gi_fabric-app-draugrUI pip
+conda activate bfabric-app-draugrUI
 ```
 
 For using mamba: 
 ```shell
-mamba create -n my_app_1 pip
-conda activate my_app_1
+mamba create -n gi_fabric-app-draugrUI pip
+conda activate gi_fabric-app-draugrUI
 ```
 
 3.2) Install remaining dependencies:
@@ -50,7 +50,7 @@ conda activate my_app_1
 pip install .
 ``` 
 
-4) Create a PARAMS.py file with your host and port!
+### 4) Create a PARAMS.py file with your host and port!
 
 ```python
 # PARAMS.py
@@ -60,7 +60,7 @@ DEV = False
 CONFIG_FILE_PATH = "~/.bfabricpy.yml"
 ```
 
-5) Run the application 
+### 5) Run the application 
 
 ```shell
 python3 index.py
@@ -72,6 +72,6 @@ or
 uv run index.py
 ```
 
-6) Check it out! 
+### 6) Check it out! 
 
 Visit http://localhost:8050 to see your site in action.
