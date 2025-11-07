@@ -15,7 +15,7 @@ git clone https://github.com/CodingKaiser/bfabric-app-draugrUI.git && cd bfabric
 
 #### Option #1: Use `uv` (**recommended**)
 
-Install (uv)[https://docs.astral.sh/uv/getting-started/installation/] and run
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run
 
 ```shell
 uv sync
