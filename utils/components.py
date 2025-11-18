@@ -24,7 +24,7 @@ def lane_card(lane_position, container_ids):
                 html.P(f"Container IDs:"),
             ] + [
                 html.H5(name) for name in container_ids
-            ]
+            ] if container_ids else html.P(f"None Assigned")
         ),
     ]
     return dbc.Card(card_content, style={"max-width": "25vw", "margin": "10px"})

@@ -147,7 +147,11 @@ def entity_data(token_data: dict) -> str:
         for lane in lane_samples:
             samples = []
             sample_ids = [str(elt["id"]) for elt in lane.get("sample", [])]
-            if len(sample_ids) < 100:
+
+            if not len(sample_ids):
+                samples = []
+
+            elif len(sample_ids) < 100:
 
                 #samples = wrapper.read(endpoint="sample", obj={"id": sample_ids}, max_results=None)
                 samples = L.logthis(
