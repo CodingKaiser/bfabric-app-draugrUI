@@ -161,6 +161,14 @@ app.layout = html.Div(
             target="gstore"
         ),
         dbc.Tooltip(
+            "Skip post-demultiplexing processing steps.",
+            target="skip-postprocessing"
+        ),
+        dbc.Tooltip(
+            "Skip the demultiplexing step entirely.",
+            target="skip-demux"
+        ),
+        dbc.Tooltip(
             """For single-index 10X samples, determines if we should run in multiome-
                         mode (with CellRangerARC) or with the default program (CellRanger).
                         Overrides B-Fabric-derived information.
@@ -186,6 +194,8 @@ app.layout = html.Div(
         Output('page-title', 'children'),
         Output('draugr-button', 'disabled'),
         Output('gstore', 'disabled'),
+        Output('skip-postprocessing', 'disabled'),
+        Output('skip-demux', 'disabled'),
         Output('wizard', 'disabled'),
         Output('test', 'disabled'),
         Output('multiome', 'disabled'),
@@ -205,37 +215,37 @@ def display_page(url_params):
     base_title = " "
 
     if not url_params:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
+        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
     token = "".join(url_params.split('token=')[1:])
     tdata_raw = auth_utils.token_to_data(token)
 
     if tdata_raw:
         if tdata_raw == "EXPIRED":
-            return None, None, None, components.expired, components.expired, components.expired, base_title, True, True, True, True, True, True, True, True, True, True, True
+            return None, None, None, components.expired, components.expired, components.expired, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
         else:
             tdata = json.loads(tdata_raw)
     else:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
+        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
     if tdata:
         entity_data = json.loads(auth_utils.entity_data(tdata))
         page_title = f"{tdata['entityClass_data']} - {entity_data['name']}" if tdata else "B-Fabric App Interface"
 
         if not tdata:
-            return token, None, None, components.no_auth, components.no_auth, components.no_auth, page_title, True, True, True, True, True, True, True, True, True, True, True
+            return token, None, None, components.no_auth, components.no_auth, components.no_auth, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
         elif not entity_data:
-            return token, None, None, components.no_entity, components.no_entity, components.no_entity, page_title, True, True, True, True, True, True, True, True, True, True, True
+            return token, None, None, components.no_entity, components.no_entity, components.no_entity, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
         else:
             if not DEV:
-                return token, tdata, entity_data, components.auth, components.auth2, components.auth3, page_title, False, False, False, False, False, False, False, False, False, False, False
+                return token, tdata, entity_data, components.auth, components.auth2, components.auth3, page_title, False, False, False, False, False, False, False, False, False, False, False, False, False
             else:
-                return token, tdata, entity_data, components.dev, components.dev, components.dev, page_title, True, True, True, True, True, True, True, True, True, True, True
+                return token, tdata, entity_data, components.dev, components.dev, components.dev, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
     else:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True
+        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
 
 @app.callback(
     Output('draugr-dropdown', 'options'),
@@ -429,6 +439,8 @@ def submit_bug_report(n_clicks, token, entity_data, bug_description):
     [
         State("draugr-dropdown", "value"),
         State("gstore", "on"),
+        State("skip-postprocessing", "on"),
+        State("skip-demux", "on"),
         State("wizard", "on"),
         State("test", "on"),
         State("multiome", "on"),
@@ -442,7 +454,7 @@ def submit_bug_report(n_clicks, token, entity_data, bug_description):
     ],
     prevent_initial_call=True
 )
-def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, multiome, bcl_flags, cellranger_flags, bases2fastq_flags, token, token_data, entity_data, orders2):
+def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocessing, skip_demux, wizard, test, multiome, bcl_flags, cellranger_flags, bases2fastq_flags, token, token_data, entity_data, orders2):
 
     L = Logger(jobid=token_data.get('jobId', None), username=token_data.get("user_data", "None"))
 
@@ -458,6 +470,8 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, wizard, test, mu
             run_folder=entity_data['datafolder'],
             order_list=orders,
             skip_gstore=gstore,
+            skip_postprocessing=skip_postprocessing,
+            skip_demux=skip_demux,
             disable_wizard=wizard,
             test_mode=test,
             is_multiome=multiome,

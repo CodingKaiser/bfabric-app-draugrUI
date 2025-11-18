@@ -6,6 +6,8 @@ def generate_draugr_command(
     run_folder,
     order_list,
     skip_gstore=False,
+    skip_postprocessing=False,
+    skip_demux=False,
     disable_wizard=False,
     test_mode=False,
     is_multiome=False,
@@ -21,6 +23,8 @@ def generate_draugr_command(
         run_folder (str): Run folder name.
         order_list (list): List of order IDs to process.
         skip_gstore (bool): Skip the Gstore copy step.
+        skip_postprocessing (bool): Skip post-demultiplexing processing.
+        skip_demux (bool): Skip demultiplexing step.
         disable_wizard (bool): Disable the wizard.
         test_mode (bool): Enable test mode.
         is_multiome (bool): Enable multiome mode.
@@ -38,6 +42,10 @@ def generate_draugr_command(
 
     if skip_gstore:
         draugr_command += " --skip-gstore-copy"
+    if skip_postprocessing:
+        draugr_command += " --skip-post-demux"
+    if skip_demux:
+        draugr_command += " --skip-demux"
     if disable_wizard:
         draugr_command += " --disable-wizard"
     if test_mode:

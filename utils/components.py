@@ -37,8 +37,6 @@ default_sidebar = [
     html.P(id="sidebar_text", children="Select Orders to DMX"),
     dcc.Dropdown([], id='draugr-dropdown', multi=True),
     html.Br(),
-    html.P(id="draugr-text-1", children="Skip Gstore Copy"),
-    daq.BooleanSwitch(id='gstore', on=False),
     html.P(id="draugr-text-2", children="Disable Wizard"),
     daq.BooleanSwitch(id='wizard', on=False),
     html.P(id="draugr-text-3", children="Test Mode"),
@@ -51,6 +49,14 @@ default_sidebar = [
     dbc.Input(value="", placeholder='Custom Cellranger flags', id='cellranger-input'),
     html.Br(),
     dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
+    html.Br(),
+    html.P(id="draugr-text-skip-header", children="Advanced Options", style={"font-weight": "bold"}),
+    html.P(id="draugr-text-1", children="Skip GStore Copy"),
+    daq.BooleanSwitch(id='gstore', on=False),
+    html.P(id="draugr-text-5", children="Skip Postprocessing"),
+    daq.BooleanSwitch(id='skip-postprocessing', on=False),
+    html.P(id="draugr-text-6", children="Skip Demultiplexing"),
+    daq.BooleanSwitch(id='skip-demux', on=False),
     html.Br(),
     dbc.Button('Submit', id='draugr-button'),
 ]
@@ -186,8 +192,16 @@ docs_tab = dbc.Row(
                         ), " Select the order(s) for which you'd like to re-trigger demultiplexing.",
                         html.Br(),html.Br(),
                         html.B(
-                            "Skip Gstore Copy --"
+                            "Skip GStore Copy --"
                         ), " Select this option if you don't want to copy to gstore. Mostly useful if you're not sure yet if the current settings will work.",
+                        html.Br(),html.Br(),
+                        html.B(
+                            "Skip Postprocessing --"
+                        ), " Skip the post-demultiplexing processing steps.",
+                        html.Br(),html.Br(),
+                        html.B(
+                            "Skip Demultiplexing --"
+                        ), " Skip the demultiplexing step entirely.",
                         html.Br(),html.Br(),
                         html.B(
                             "Disable Wizard --"
