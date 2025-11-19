@@ -14,7 +14,7 @@ from .objects import Logger
 VALIDATION_URL = "https://fgcz-bfabric.uzh.ch/bfabric/rest/token/validate?token="
 HOST = "fgcz-bfabric.uzh.ch"
 
-def token_to_data(token: str) -> str:
+def token_to_data(token: str) -> str | None:
 
     if not token:
         return None
@@ -62,6 +62,7 @@ def token_to_data(token: str) -> str:
 
 
         return json.dumps(token_data)
+    return None
 
 
 def token_response_to_bfabric(token_response: dict) -> Bfabric:
@@ -96,12 +97,12 @@ def entity_data(token_data: dict) -> str:
     entity_class = token_data.get('entityClass_data')
     endpoint = entity_class_map.get(entity_class)
     entity_id = token_data.get('entity_id_data')
-    jobId = token_data.get('jobId', None)
+    job_id = token_data.get('jobId', None)
     username = token_data.get("user_data", "None")
 
     sample_lanes = {}
 
-    L = Logger(jobid=jobId, username=username)
+    L = Logger(jobid=job_id, username=username)
     if wrapper and entity_class and endpoint and entity_id:
 
         entity_data_list = L.logthis(
