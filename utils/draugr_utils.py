@@ -62,7 +62,7 @@ def generate_draugr_command(
 
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
-    SET_ENVIRON = "export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
+    SET_ENVIRON = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
     LMOD_SETUP = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
     # CONDA_SETUP = ". /usr/local/ngseq/miniconda3/etc/profile.d/conda.sh && conda activate gi_py3.11.5 &&"
     CONDA_SETUP = "module load Dev/Python && conda activate gi_py3.11.5 &&"
