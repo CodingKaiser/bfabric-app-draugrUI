@@ -1,3 +1,23 @@
+"""
+SSH command builders for the Draugr and Sushi pipelines.
+
+Neither function executes anything directly — both return shell command strings
+that the caller passes to os.system() (or prints in test mode).
+
+  generate_draugr_command()  — builds the full SSH + nohup call to start Draugr
+                                on the sequencing server (illumina@<server>),
+                                loading required modules and activating conda first.
+
+  generate_sushi_command()   — locates the run's dataset file on fgcz-h-082,
+                                then returns two commands: one to grep the selected
+                                order IDs into a Sushi bash script, and one to
+                                execute that script via nohup.
+
+  check_if_file_exists()     — helper that runs an SSH ls via subprocess and
+                                returns True/False; used internally by
+                                generate_sushi_command() to find the dataset file.
+"""
+
 import subprocess
 
 

@@ -164,8 +164,9 @@ cython_debug/
 
 
 bfabricPy/*
-bfabricPy 
+bfabricPy
 PARAMS.py
+MIGRATION_DIARY.md
 
 # Pycharm
 .idea
