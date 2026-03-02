@@ -58,7 +58,7 @@ def generate_draugr_command(
     if cellranger_flags:
         draugr_command += " --custom-cellranger-flags " + cellranger_flags
     if bases2fastq_flags:
-        draugr_command += " --custom-bases2fastq_flags " + bases2fastq_flags
+        draugr_command += " --custom-bases2fastq-flags " + bases2fastq_flags
 
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
