@@ -97,10 +97,6 @@ main_content = html.Div([
         target="tip-wizard",
     ),
     dbc.Tooltip(
-        "Test mode is currently disabled and will be re-enabled in a future release.",
-        target="tip-test",
-    ),
-    dbc.Tooltip(
         "For single-index 10X samples, determines if we should run in multiome-mode "
         "(with CellRangerARC) or with the default program (CellRanger). "
         "Overrides B-Fabric-derived information.",
@@ -560,7 +556,6 @@ def toggle_modal2(n1, n2, is_open):
         State("skip-postprocessing", "on"),
         State("skip-demux", "on"),
         State("wizard", "on"),
-        State("test", "on"),
         State("multiome", "on"),
         State("bcl-input", "value"),
         State("cellranger-input", "value"),
@@ -572,7 +567,7 @@ def toggle_modal2(n1, n2, is_open):
     prevent_initial_call=True
 )
 def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocessing,
-                           skip_demux, wizard, test, multiome, bcl_flags,
+                           skip_demux, wizard, multiome, bcl_flags,
                            cellranger_flags, bases2fastq_flags, token_data, run_data, orders2):
 
     if not token_data:
@@ -594,7 +589,6 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
             skip_postprocessing=skip_postprocessing,
             skip_demux=skip_demux,
             disable_wizard=wizard,
-            test_mode=test,
             is_multiome=multiome,
             bcl_flags=bcl_flags,
             cellranger_flags=cellranger_flags,

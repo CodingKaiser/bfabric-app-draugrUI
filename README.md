@@ -46,7 +46,7 @@ Wraps the `bfabric` Python library with helpers used throughout the app:
 ### `utils/components.py`
 All domain-specific Dash/HTML components:
 - `lane_card()` — renders a single sequencing lane as a Bootstrap card
-- `default_sidebar` — DMX options: order dropdown, boolean switches (Wizard, Test Mode, Multiome, Skip flags), custom flag inputs
+- `default_sidebar` — DMX options: order dropdown, boolean switches (Wizard, Multiome, Skip flags), custom flag inputs
 - `sushi_sidebar` — order dropdown + submit button for the Fastq Reports tab
 - `modal`, `modal2` — confirmation dialogs shown before executing commands
 - `documentation_content` — the HTML content rendered in the Documentation tab

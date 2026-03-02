@@ -2,7 +2,7 @@
 SSH command builders for the Draugr and Sushi pipelines.
 
 Neither function executes anything directly — both return shell command strings
-that the caller passes to os.system() (or prints in test mode).
+that the caller passes to os.system().
 
   generate_draugr_command()  — builds the full SSH + nohup call to start Draugr
                                 on the sequencing server (illumina@<server>),
@@ -29,7 +29,6 @@ def generate_draugr_command(
     skip_postprocessing=False,
     skip_demux=False,
     disable_wizard=False,
-    test_mode=False,
     is_multiome=False,
     bcl_flags=None,
     cellranger_flags=None,
@@ -46,7 +45,6 @@ def generate_draugr_command(
         skip_postprocessing (bool): Skip post-demultiplexing processing.
         skip_demux (bool): Skip demultiplexing step.
         disable_wizard (bool): Disable the wizard.
-        test_mode (bool): Enable test mode.
         is_multiome (bool): Enable multiome mode.
         bcl_flags (str): Custom Bcl2fastq flags.
         cellranger_flags (str): Custom Cellranger flags.
@@ -57,9 +55,6 @@ def generate_draugr_command(
     """
     draugr_command = f"python /export/local/analyses/draugr_exec/draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/{run_folder} --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets"
 
-    test_command = f"python /export/local/analyses/draugr_exec/draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/20240625_FS10002953_30_BTC69705-1710 --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets --skip-gstore-copy --disable-wizard"
-    test_server = "fgcz-s-025"
-
     if skip_gstore:
         draugr_command += " --skip-gstore-copy"
     if skip_postprocessing:
@@ -68,9 +63,6 @@ def generate_draugr_command(
         draugr_command += " --skip-demux"
     if disable_wizard:
         draugr_command += " --disable-wizard"
-    if test_mode:
-        # draugr_command += " --test-mode"
-        draugr_command += ""
     if is_multiome:
         draugr_command += " --is-multiome-run"
     if bcl_flags:
@@ -91,7 +83,6 @@ def generate_draugr_command(
     prefix = f"{set_environ} {lmod_setup} {conda_setup} {module_load}"
 
     system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
-    test_system_call = f"ssh illumina@{test_server} '{prefix} && nohup {test_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
 
     # change to just operation get executed
     # params empty
