@@ -1,53 +1,216 @@
-from dash import Input, Output, State, html, dcc
+"""
+DraugrUI main application.
+
+Defines the Dash app, layout, and all callbacks. Entry point when run directly.
+
+Layout structure:
+  - Banner (black bar with app title)
+  - Header row (run name, B-Fabric Entity link, View Logs link)
+  - Persistent DMX sidebar (always in DOM; hidden/shown per tab via callback)
+  - Flat tab row: Draugr/DMX | Raw Data | Fastq Reports | Documentation | Report a Bug
+
+Callback responsibilities:
+  - display_page       : validate token, fetch run data, populate stores
+  - register_auth_callback : show/hide content based on auth state (framework)
+  - update_dmx_dropdown / update_sushi_dropdown : populate order dropdowns
+  - update_lane_display    : render lane cards from run data
+  - toggle_modal / toggle_modal2 : open/close confirmation dialogs
+  - execute_draugr_command : build and fire Draugr or Sushi SSH commands
+  - toggle_submit_button / _2 : disable submit when no orders selected
+  - toggle_sidebar_visibility : show sidebar on DMX+Docs tabs, hide elsewhere
+  - goto_submission_tab       : "Go to Submission" button returns to DMX tab
+"""
+
+from dash import Input, Output, State, html, dcc, callback_context as ctx
 import dash_bootstrap_components as dbc
-import dash
-import json
 import os
-from datetime import datetime as dt
-# import bfabric
-from utils import auth_utils, components, draugr_utils as du
 import time
-from utils.objects import Logger
-from dash import callback_context as ctx
 
-
-if os.path.exists("./PARAMS.py"):
-    try:
-        from PARAMS import PORT, HOST, DEV
-    except:
-        PORT = 8050
-        HOST = 'localhost'
-        DEV = True
-else:
-    PORT = 8050
-    HOST = 'localhost'
-    DEV = True
-
-
-####### Main components of a Dash App: ########
-# 1) app (dash.Dash())
-# 2) app.layout (html.Div())
-# 3) app.callback()
-
-#################### (1) app ####################
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
-    meta_tags=[
-        {"name": "viewport", "content": "width=device-width, initial-scale=1.0"}
-    ],
+from bfabric_web_apps import (
+    create_app,
+    process_url_and_token,
+    register_auth_callback,
+    HOST,
+    PORT,
 )
+from bfabric_web_apps.layouts.layouts import get_report_bug_tab
+from utils.bfabric_utils import get_logger
 
-#################### (2) app.layout ####################
+from utils import draugr_utils as du
+from utils.components import (
+    lane_card,
+    default_sidebar,
+    sushi_sidebar,
+    modal,
+    modal2,
+    documentation_content,
+)
+from utils.run_data import fetch_run_entity_data
 
+
+# ==================== (1) App ====================
+
+app = create_app(title="DraugrUI")
+
+# ==================== (2) Layout ====================
+
+# The main content shown to authenticated users (alerts, tooltips, modals, store)
+main_content = html.Div([
+    # Alerts
+    dbc.Alert(
+        "Demultiplexing has begun! Please close this window now, and see B-Fabric for further status updates and logs.",
+        id="alert-fade",
+        dismissable=True,
+        is_open=False,
+        color="success",
+        style={"max-width": "50vw", "margin": "10px"}
+    ),
+    dbc.Alert(
+        "Sushification has begun! Please close this window now, and see Sushi for further status updates and logs.",
+        id="alert-fade-2",
+        dismissable=True,
+        is_open=False,
+        color="success",
+        style={"max-width": "50vw", "margin": "10px"}
+    ),
+    dbc.Alert(
+        "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
+        id="alert-fade-2-fail",
+        dismissable=True,
+        is_open=False,
+        color="danger",
+        style={"max-width": "50vw", "margin": "10px"}
+    ),
+    dbc.Alert(
+        "Your submission didn't go through, because you haven't selected any orders from the dropdown! Please select which orders you'd like to process and try again.",
+        id="alert-fade-4",
+        dismissable=True,
+        is_open=False,
+        color="danger",
+        style={"max-width": "50vw", "margin": "10px"}
+    ),
+
+    # Tooltips (switch labels — target the ⓘ icon IDs)
+    dbc.Tooltip(
+        "Disable the demultiplexing Wizard. None of the samples are tested for "
+        "barcode issues and the information from B-Fabric is taken as-is.",
+        target="tip-wizard",
+    ),
+    dbc.Tooltip(
+        "Test mode is currently disabled and will be re-enabled in a future release.",
+        target="tip-test",
+    ),
+    dbc.Tooltip(
+        "For single-index 10X samples, determines if we should run in multiome-mode "
+        "(with CellRangerARC) or with the default program (CellRanger). "
+        "Overrides B-Fabric-derived information.",
+        target="tip-multiome",
+    ),
+    dbc.Tooltip("Will skip copying files to gstore.", target="tip-gstore"),
+    dbc.Tooltip("Skip post-demultiplexing processing steps.", target="tip-skip-postprocessing"),
+    dbc.Tooltip("Skip the demultiplexing step entirely.", target="tip-skip-demux"),
+    # Tooltips (inputs — tooltip on the field itself)
+    dbc.Tooltip(
+        "Custom bcl2fastq flags wrapped in a string, arguments separated by '|'. "
+        "E.g. \"--barcode-mismatches 2|--minimum-trimmed-read-length\"",
+        target="bcl-input",
+    ),
+    dbc.Tooltip(
+        "Custom cellranger mkfastq flags wrapped in a string, arguments separated by '|'. "
+        "E.g. \"--barcode-mismatches 2|--delete-undetermined\"",
+        target="cellranger-input",
+    ),
+    dbc.Tooltip(
+        "Custom bases2fastq flags wrapped in a string, arguments separated by ';'. "
+        "E.g. \"--i1-cycles 8;--r2-cycles 40\"",
+        target="bases2fastq-input",
+    ),
+    # Tooltips on Submit button wrappers (visible even when buttons are disabled)
+    dbc.Tooltip(
+        "Select at least one order from the dropdown above to enable submission.",
+        target="submit-btn-wrapper",
+    ),
+    dbc.Tooltip(
+        "Select at least one order from the dropdown above to enable submission.",
+        target="submit-btn-wrapper-2",
+    ),
+
+    # Hidden div for command execution output
+    html.Div(id="empty-div-1"),
+
+    # Confirmation modals
+    modal,
+    modal2,
+
+    # Store for run-specific entity data (lanes, containers, server, datafolder)
+    dcc.Store(id='run_data', storage_type='session'),
+])
+
+# Persistent DMX sidebar (lives outside tabs so values survive tab switching).
+# Uses all controls from default_sidebar except the Submit button (last item),
+# then adds both action buttons — only one visible at a time.
+_sidebar_style = {"border-right": "2px solid #d4d7d9", "height": "100%", "padding": "20px", "font-size": "20px"}
+
+sidebar_children = default_sidebar[:-1] + [
+    html.Div(id="submit-btn-wrapper",   children=dbc.Button('Submit', id='draugr-button')),
+    html.Div(id="goto-btn-wrapper",     children=dbc.Button('Go to Submission ›', id='goto-submission-btn', color="info"),
+             style={"display": "none"}),
+]
+
+# Tab content — no sidebar inside DMX or Documentation; Fastq keeps its own sushi sidebar
+tab_list = [
+    dbc.Tab(
+        dcc.Loading(
+            html.Div(id="lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
+        ),
+        label="Draugr / DMX",
+        tab_id="dmx",
+    ),
+    dbc.Tab(
+        dbc.Row([
+            dbc.Col(
+                html.Div(children=sushi_sidebar, style=_sidebar_style),
+                width=3,
+            ),
+            dbc.Col(
+                dcc.Loading(
+                    html.Div(id="sushi-lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
+                ),
+                width=9,
+            ),
+        ], style={"margin-top": "0px", "min-height": "40vh"}),
+        label="Fastq Reports",
+        tab_id="fastq-reports",
+    ),
+    dbc.Tab(
+        html.Div(
+            children=documentation_content,
+            style={"margin-top": "10px", "margin-left": "2vw", "font-size": "20px",
+                   "padding-right": "40px", "overflow-y": "scroll", "max-height": "60vh"},
+        ),
+        label="Documentation",
+        tab_id="documentation",
+    ),
+    dbc.Tab(
+        dcc.Loading(get_report_bug_tab()),
+        label="Report a Bug",
+        tab_id="report-bug",
+    ),
+]
+
+# Build layout manually (replicates framework structure but with flat tabs)
 app.layout = html.Div(
     children=[
-        dcc.Location(
-            id='url',
-            refresh=False
-        ),
+        dcc.Location(id='url', refresh=False),
+        dcc.Store(id='token', storage_type='session'),
+        dcc.Store(id='entity', storage_type='session'),
+        dcc.Store(id='app_data', storage_type='session'),
+        dcc.Store(id='token_data', storage_type='session'),
+        dcc.Store(id='dynamic-link-store', storage_type='session'),
+
         dbc.Container(
             children=[
+                # Banner
                 dbc.Row(
                     dbc.Col(
                         html.Div(
@@ -56,303 +219,304 @@ app.layout = html.Div(
                                 html.Div(
                                     children=[
                                         html.P(
-                                            'Run Processing UI',
-                                            style={'color':'#ffffff','margin-top':'15px','height':'80px','width':'100%',"font-size":"40px","margin-left":"20px"}
+                                            "Run Processing UI",
+                                            style={
+                                                'color': '#ffffff',
+                                                'margin-top': '15px',
+                                                'height': '80px',
+                                                'width': '100%',
+                                                'font-size': '40px',
+                                                'margin-left': '20px'
+                                            }
                                         )
                                     ],
-                                    style={"background-color":"#000000", "border-radius":"10px"}
+                                    style={"background-color": "#000000", "border-radius": "10px"}
                                 ),
                             ],
+                            style={"position": "relative", "padding": "10px"}
                         ),
                     ),
                 ),
+                # Header row (page title + buttons)
                 dbc.Row(
                     dbc.Col(
-                        [
-                            html.Div(
-                                children=[html.P(id="page-title",children=[str(" ")], style={"font-size":"40px", "margin-left":"20px", "margin-top":"10px"})],
-                                style={"margin-top":"0px", "min-height":"80px","height":"6vh","border-bottom":"2px solid #d4d7d9"}
-                            ),
-                            dbc.Alert(
-                                "Demultiplexing has begun! Please close this window now, and see B-Fabric for further status updates and logs.",
-                                id="alert-fade",
-                                dismissable=True,
-                                is_open=False,
-                                color="success",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            ),
-                            dbc.Alert(
-                                "Sushification has begun! Please close this window now, and see Sushi for further status updates and logs.",
-                                id="alert-fade-2",
-                                dismissable=True,
-                                is_open=False,
-                                color="success",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            ),
-                            dbc.Alert(
-                                "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
-                                id="alert-fade-2-fail",
-                                dismissable=True,
-                                is_open=False,
-                                color="danger",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            ),
-                            dbc.Alert(
-                                "You're bug report has been submitted. Thanks for helping us improve!",
-                                id="alert-fade-3",
-                                dismissable=True,
-                                is_open=False,
-                                color="info",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            ),
-                            dbc.Alert(
-                                "Failed to submit bug report! Please email the developers directly at the email below!",
-                                id="alert-fade-3-fail",
-                                dismissable=True,
-                                is_open=False,
-                                color="danger",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            ),
-                            dbc.Alert(
-                                "Your submission didn't go through, because you haven't selected any orders from the dropdown! Please select which orders you'd like to process and try again.",
-                                id="alert-fade-4",
-                                dismissable=True,
-                                is_open=False,
-                                color="danger",
-                                style={"max-width":"50vw", "margin":"10px"}
-                            )
-                        ]
-                    )
+                        html.Div(
+                            children=[
+                                html.Div(
+                                    id="page-title",
+                                    children=[],
+                                    style={
+                                        "margin-left": "20px",
+                                        "margin-top": "10px",
+                                        "max-width": "calc(100% - 350px)",
+                                    }
+                                ),
+                                html.Div(
+                                    children=[
+                                        html.Div(
+                                            children=[
+                                                html.A(
+                                                    dbc.Button(
+                                                        "B-Fabric Entity",
+                                                        id="bfabric-entity-button",
+                                                        color="secondary",
+                                                        style={
+                                                            "font-size": "18px",
+                                                            "padding": "10px 20px",
+                                                            "border-radius": "8px",
+                                                            "margin-right": "10px"
+                                                        }
+                                                    ),
+                                                    id="bfabric-entity-link",
+                                                    href="#",
+                                                    target="_blank"
+                                                ),
+                                                html.A(
+                                                    dbc.Button(
+                                                        "View Logs",
+                                                        id="dynamic-link-button",
+                                                        color="secondary",
+                                                        style={
+                                                            "font-size": "18px",
+                                                            "padding": "10px 20px",
+                                                            "border-radius": "8px"
+                                                        }
+                                                    ),
+                                                    id="dynamic-link",
+                                                    href="#",
+                                                    target="_blank"
+                                                ),
+                                            ],
+                                            style={
+                                                "display": "flex",
+                                                "align-items": "center",
+                                                "margin-bottom": "8px"
+                                            }
+                                        ),
+                                        html.Div(
+                                            id="auth-display",
+                                            children=[],
+                                            style={
+                                                "font-size": "14px",
+                                                "text-align": "right",
+                                                "color": "#333"
+                                            }
+                                        ),
+                                    ],
+                                    style={
+                                        "position": "absolute",
+                                        "right": "20px",
+                                        "top": "10px",
+                                        "display": "flex",
+                                        "flex-direction": "column",
+                                        "align-items": "flex-end"
+                                    }
+                                ),
+                            ],
+                            style={
+                                "position": "relative",
+                                "margin-top": "0px",
+                                "min-height": "80px",
+                                "border-bottom": "2px solid #d4d7d9",
+                                "display": "flex",
+                                "align-items": "center",
+                                "justify-content": "space-between",
+                                "padding-right": "20px",
+                                "padding-top": "10px",
+                                "padding-bottom": "10px"
+                            }
+                        ),
+                    ),
                 ),
-                components.tabs,
-            ], style={"width":"100vw"},
-            fluid=True
-        ),
-        dcc.Store(id='token', storage_type='session'), # Where we store the actual token
-        dcc.Store(id='entity', storage_type='session'), # Where we store the entity data retrieved from bfabric
-        dcc.Store(id='token_data', storage_type='session'), # Where we store the token auth response
-        dbc.Tooltip(
-            """Custom bcl2fastq flags to use for the standard samples wrapped in a
-                string, with arguments separated by '|' characters, E.g. "--barcode-
-                mismatches 2|--minimum-trimmed-read-length" """,
-            target="bcl-input",
-        ),
-        dbc.Tooltip(
-            """Custom cellranger mkfastq flags to use for the 10x samples wrapped in a
-                        string, with arguments separated by '|' characters, E.g. "--barcode-
-                        mismatches 2|--delete-undetermined"
-                 """,
-            target="cellranger-input",
-        ),
-        dbc.Tooltip(
-            """Custom bases2fastq flags to use wrapped in a string, with arguments
-                        separated by ';' characters, E.g. "--i1-cycles 8;--r2-cycles 40 "
-             """,
-            target="bases2fastq-input"
-        ),
-        dbc.Tooltip(
-            """Disable the demultiplexing Wizard. None of the samples are tested for
-                        barcode issues andthe information from B-Fabric is taken as-is.
-             """,
-            target="wizard"
-        ),
-        dbc.Tooltip(
-            "Will skip copying files to gstore.",
-            target="gstore"
-        ),
-        dbc.Tooltip(
-            "Skip post-demultiplexing processing steps.",
-            target="skip-postprocessing"
-        ),
-        dbc.Tooltip(
-            "Skip the demultiplexing step entirely.",
-            target="skip-demux"
-        ),
-        dbc.Tooltip(
-            """For single-index 10X samples, determines if we should run in multiome-
-                        mode (with CellRangerARC) or with the default program (CellRanger).
-                        Overrides B-Fabric-derived information.
-             """,
-            target="multiome"
-        ),
-        html.Div(id="empty-div-1"),
-        components.modal,
-        components.modal2,
-    ],style={"width":"100vw", "overflow-x":"hidden", "overflow-y":"scroll"}
+
+                # Bug report alerts
+                dbc.Row(
+                    dbc.Col([
+                        dbc.Alert(
+                            "Your bug report has been submitted. Thanks for helping us improve!",
+                            id="alert-fade-bug-success",
+                            dismissable=True,
+                            is_open=False,
+                            color="info",
+                            style={"max-width": "50vw", "margin-left": "10px", "margin-top": "10px"}
+                        ),
+                        dbc.Alert(
+                            "Failed to submit bug report! Please email the developers directly at the email below!",
+                            id="alert-fade-bug-fail",
+                            dismissable=True,
+                            is_open=False,
+                            color="danger",
+                            style={"max-width": "50vw", "margin-left": "10px", "margin-top": "10px"}
+                        ),
+                    ])
+                ),
+
+                # Auth message container (shown when not authenticated)
+                html.Div(
+                    id="auth-message-container",
+                    children=[],
+                    style={"display": "none", "padding": "40px", "margin-top": "20px"}
+                ),
+
+                # Main content container (alerts, tooltips, modals, store - always in DOM)
+                html.Div(
+                    id="main-content-container",
+                    children=main_content,
+                ),
+
+                # Persistent sidebar + tabs (shown/hidden together by auth callback)
+                html.Div(
+                    id="tabs-container",
+                    children=[
+                        dbc.Row([
+                            # Sidebar: visible only on DMX and Documentation tabs
+                            dbc.Col(
+                                html.Div(
+                                    id="sidebar-container",
+                                    children=sidebar_children,
+                                    style={
+                                        "border-right": "2px solid #d4d7d9",
+                                        "padding": "20px",
+                                        "font-size": "20px",
+                                        "position": "sticky",
+                                        "top": "0",
+                                        "overflow-y": "auto",
+                                        "max-height": "100vh",
+                                    },
+                                ),
+                                id="sidebar-col",
+                                width=3,
+                            ),
+                            # Tab content: expands to full width when sidebar is hidden
+                            dbc.Col(
+                                dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
+                                id="content-col",
+                                width=9,
+                            ),
+                        ], style={"margin-top": "0px", "min-height": "40vh"}),
+                    ]
+                ),
+            ],
+            fluid=True,
+            style={"width": "100vw"}
+        )
+    ],
+    style={"width": "100vw", "overflow-x": "hidden", "overflow-y": "scroll"}
 )
 
 
-#################### (3) app.callback ####################
+# ==================== (3) Callbacks ====================
+
+# --- Auth: URL → token/entity stores ---
+
 @app.callback(
     [
         Output('token', 'data'),
         Output('token_data', 'data'),
         Output('entity', 'data'),
-        Output('page-content', 'children'),
-        Output('page-content2', 'children'),
-        Output('page-content3', 'children'),
+        Output('app_data', 'data'),
         Output('page-title', 'children'),
-        Output('draugr-button', 'disabled'),
-        Output('gstore', 'disabled'),
-        Output('skip-postprocessing', 'disabled'),
-        Output('skip-demux', 'disabled'),
-        Output('wizard', 'disabled'),
-        Output('test', 'disabled'),
-        Output('multiome', 'disabled'),
-        Output('bcl-input', 'disabled'),
-        Output('cellranger-input', 'disabled'),
-        Output('draugr-dropdown', 'disabled'),
-        Output('bases2fastq-input', 'disabled'),
-        Output('draugr-dropdown-2', 'disabled'),
-        Output('draugr-button-2', 'disabled')
+        Output('session-details', 'children'),
+        Output('dynamic-link', 'href'),
+        Output('bfabric-entity-link', 'href'),
+        Output('run_data', 'data'),
     ],
-    [
-        Input('url', 'search'),
-    ]
+    [Input('url', 'search')],
 )
 def display_page(url_params):
+    """Validate token, fetch entity data, and populate stores."""
+    token, token_data, entity_data, app_data, page_title, session_details, job_link, entity_link = process_url_and_token(url_params)
 
-    base_title = " "
+    # Fetch run-specific data (lanes, containers, server, datafolder) if authenticated
+    run_data = None
+    if token_data and not token_data.get("access_denied") and token_data.get("is_elevated"):
+        run_data = fetch_run_entity_data(token_data)
 
-    if not url_params:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
+    return (
+        token,
+        token_data,
+        entity_data,
+        app_data,
+        page_title or " ",
+        session_details or [],
+        job_link or "#",
+        entity_link or "#",
+        run_data,
+    )
 
-    token = "".join(url_params.split('token=')[1:])
-    tdata_raw = auth_utils.token_to_data(token)
 
-    if tdata_raw:
-        if tdata_raw == "EXPIRED":
-            return None, None, None, components.expired, components.expired, components.expired, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
+# --- Auth routing: show/hide main content based on token state ---
 
-        else:
-            tdata = json.loads(tdata_raw)
-    else:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
+register_auth_callback(app, main_content=main_content)
 
-    if tdata:
-        entity_data = json.loads(auth_utils.entity_data(tdata))
-        page_title = f"{tdata['entityClass_data']} - {entity_data['name']}" if tdata else "B-Fabric App Interface"
 
-        if not tdata:
-            return token, None, None, components.no_auth, components.no_auth, components.no_auth, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
-
-        elif not entity_data:
-            return token, None, None, components.no_entity, components.no_entity, components.no_entity, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
-
-        else:
-            if not DEV:
-                return token, tdata, entity_data, components.auth, components.auth2, components.auth3, page_title, False, False, False, False, False, False, False, False, False, False, False, False, False
-            else:
-                return token, tdata, entity_data, components.dev, components.dev, components.dev, page_title, True, True, True, True, True, True, True, True, True, True, True, True, True
-    else:
-        return None, None, None, components.no_auth, components.no_auth, components.no_auth, base_title, True, True, True, True, True, True, True, True, True, True, True, True, True
+# --- Dropdown population from run data ---
 
 @app.callback(
     Output('draugr-dropdown', 'options'),
-    [Input('entity', 'data')],
+    [Input('run_data', 'data')],
     prevent_initial_call=True
 )
-def update_dropdown(entity_data):
-    orders = entity_data.get('containers')
-    options = [{"label": elt, "value": elt} for elt in orders]
-    return options
+def update_dmx_dropdown(run_data):
+    if not run_data:
+        return []
+    orders = run_data.get('containers', [])
+    return [{"label": elt, "value": elt} for elt in orders]
+
 
 @app.callback(
     Output('draugr-dropdown-2', 'options'),
-    [Input('entity', 'data')],
+    [Input('run_data', 'data')],
     prevent_initial_call=True
 )
-def update_dropdown(entity_data):
-    orders = entity_data['containers']
-    options = [{"label": elt, "value": elt} for elt in orders]
-    return options
+def update_sushi_dropdown(run_data):
+    if not run_data:
+        return []
+    orders = run_data.get('containers', [])
+    return [{"label": elt, "value": elt} for elt in orders]
+
+
+# --- Lane card display ---
 
 @app.callback(
-    [    Output('auth-div', 'children'),
-         Output('auth-div2', 'children'),
-         Output('auth-div3', 'children'),
-         Output('session-details', 'children'),
-         ],
-    [
-        Input("entity", "data"),
-    ],
-    [
-        State("token", "data"),
-    ]
+    [Output('lane-display', 'children'),
+     Output('sushi-lane-display', 'children')],
+    [Input('run_data', 'data')],
+    prevent_initial_call=True
 )
-def update_auth_div(entity_data, token):
+def update_lane_display(run_data):
+    if not run_data or 'lanes' not in run_data:
+        return [], []
 
-    token_data = json.loads(auth_utils.token_to_data(token))
+    lanes = run_data['lanes']
 
-    if not entity_data:
-        session_details = [html.P("No session details available.")]
-    else:
-        session_details = [
-            html.P([
-                html.B("Entity Name: "), entity_data['name'],
-                html.Br(),
-                html.B("Entity Class: "), token_data['entityClass_data'],
-                html.Br(),
-                html.B("Environment: "), token_data['environment'],
-                html.Br(),
-                html.B("Entity ID: "), token_data['entity_id_data'],
-                html.Br(),
-                html.B("User Name: "), token_data['user_data'],
-                html.Br(),
-                html.B("Session Expires: "), token_data['token_expires'],
-                html.Br(),
-                html.B("Current Time: "), str(dt.now().strftime("%Y-%m-%d %H:%M:%S"))
-
+    if len(lanes) != 8:
+        container = dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    lane_card(lane_position=pos, container_ids=ids)
+                    for pos, ids in lanes.items()
+                ])
             ])
-        ]
-
-    functionality_disabled = [html.P("This functionality is currently disabled while we implement this feature in Draugr. Please check back later!")]
-
-    if len(list(entity_data['lanes'].values())) != 8:
-        container = dbc.Container(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                components.lane_card(
-                                    lane_position=lane_position,
-                                    container_ids=container_ids
-                                ) for lane_position, container_ids in entity_data['lanes'].items()
-                            ]
-                        )
-                    ]
-                )
-            ]
-        )
-
+        ])
     else:
-        container = dbc.Container(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            [
-                                components.lane_card(
-                                    lane_position=i,
-                                    container_ids=entity_data['lanes'][str(i)]
-                                ) for i in range(1,5)
-                            ]
-                        ),
-                        dbc.Col(
-                            [
-                                components.lane_card(
-                                    lane_position=i,
-                                    container_ids=entity_data['lanes'][str(i)]
-                                ) for i in range(5,9)
-                            ]
-                        )
-                    ]
-                )
-            ]
-        )
+        container = dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    lane_card(lane_position=i, container_ids=lanes[str(i)])
+                    for i in range(1, 5)
+                ]),
+                dbc.Col([
+                    lane_card(lane_position=i, container_ids=lanes[str(i)])
+                    for i in range(5, 9)
+                ])
+            ])
+        ])
 
-    return container, functionality_disabled, container, session_details
+    return container, container
+
+
+# --- Modal toggles ---
 
 @app.callback(
     Output("modal", "is_open"),
@@ -364,65 +528,19 @@ def toggle_modal(n1, n2, is_open):
         return not is_open
     return is_open
 
+
 @app.callback(
     Output("modal2", "is_open"),
     [Input("draugr-button-2", "n_clicks"), Input("close2", "n_clicks")],
     [State("modal2", "is_open")],
 )
-def toggle_modal(n1, n2, is_open):
+def toggle_modal2(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
 
-@app.callback(
-    [
-        Output("alert-fade-3", "is_open"),
-        Output("alert-fade-3-fail", "is_open")
-    ],
-    [
-        Input("submit-bug-report", "n_clicks")
-    ],
-    [
-        State("token", "data"),
-        State("entity", "data"),
-        State("bug-description", "value")
-    ],
-    prevent_initial_call=True
-)
 
-def submit_bug_report(n_clicks, token, entity_data, bug_description):
-
-    if token:
-        token_data = json.loads(auth_utils.token_to_data(token))
-    else:
-        token_data = ""
-
-    jobId = token_data.get('jobId', None)
-    username = token_data.get("user_data", "None")
-
-    L = Logger(jobid=jobId, username=username)
-
-    if n_clicks:
-        L.log_operation("bug report", "Initiating bug report submission process.", params=None, flush_logs=False)
-        try:
-            sending_result = auth_utils.send_bug_report(
-                token_data=token_data,
-                entity_data=entity_data,
-                description=bug_description
-            )
-
-            if sending_result:
-                L.log_operation("bug report", f"Bug report successfully submitted. | DESCRIPTION: {bug_description}", params=None, flush_logs=True)
-                return True, False
-            else:
-                L.log_operation("bug report", "Failed to submit bug report!", params=None, flush_logs=True)
-                return False, True
-        except:
-            L.log_operation("bug report", "Failed to submit bug report!", params=None, flush_logs=True)
-            return False, True
-
-    return False, False
-
+# --- Command execution ---
 
 @app.callback(
     [
@@ -430,11 +548,11 @@ def submit_bug_report(n_clicks, token, entity_data, bug_description):
         Output("alert-fade", "is_open"),
         Output("alert-fade-2", "is_open"),
         Output("alert-fade-2-fail", "is_open"),
-        Output("alert-fade-4", "is_open")
+        Output("alert-fade-4", "is_open"),
     ],
     [
         Input("close", "n_clicks"),
-        Input("close2", "n_clicks")
+        Input("close2", "n_clicks"),
     ],
     [
         State("draugr-dropdown", "value"),
@@ -447,27 +565,30 @@ def submit_bug_report(n_clicks, token, entity_data, bug_description):
         State("bcl-input", "value"),
         State("cellranger-input", "value"),
         State("bases2fastq-input", "value"),
-        State("token", "data"),
         State("token_data", "data"),
-        State("entity", "data"),
-        State("draugr-dropdown-2", "value")
+        State("run_data", "data"),
+        State("draugr-dropdown-2", "value"),
     ],
     prevent_initial_call=True
 )
-def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocessing, skip_demux, wizard, test, multiome, bcl_flags, cellranger_flags, bases2fastq_flags, token, token_data, entity_data, orders2):
+def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocessing,
+                           skip_demux, wizard, test, multiome, bcl_flags,
+                           cellranger_flags, bases2fastq_flags, token_data, run_data, orders2):
 
-    L = Logger(jobid=token_data.get('jobId', None), username=token_data.get("user_data", "None"))
+    if not token_data:
+        return None, False, False, False, False
+
+    L = get_logger(token_data)
 
     button_clicked = ctx.triggered_id
 
     if button_clicked == "close":
         if not orders:
             return None, False, False, False, True
-        print("ORDERS:")
-        print(orders)
+
         draugr_command = du.generate_draugr_command(
-            server=entity_data['server'],
-            run_folder=entity_data['datafolder'],
+            server=run_data['server'],
+            run_folder=run_data['datafolder'],
             order_list=orders,
             skip_gstore=gstore,
             skip_postprocessing=skip_postprocessing,
@@ -480,16 +601,12 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
             bases2fastq_flags=bases2fastq_flags
         )
 
-        print("DRAUGR COMMAND:")
-        print(draugr_command)
         os.system(draugr_command)
 
         L.log_operation(
             operation="execute",
             message="DMX execution",
-            params={
-                "system_call": draugr_command
-            },
+            params={"system_call": draugr_command},
             flush_logs=True
         )
 
@@ -498,26 +615,18 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
     elif button_clicked == "close2":
         if not orders2:
             return None, False, False, False, True
-        print("ORDERS2:")
-        print(orders2)
 
         try:
             draugr_command1, draugr_command2 = du.generate_sushi_command(
                 order_list=orders2,
-                run_name=entity_data['name']
+                run_name=run_data['name']
             )
-        except:
+        except Exception:
             draugr_command1, draugr_command2 = None, None
 
         if not draugr_command1:
             L.log_operation("EXECUTE", "Sushification has FAILED! Please try DMX again, and then try Sushi again.", params=None, flush_logs=True)
             return None, False, False, True, False
-
-        print("GENERATE SUSHI SCRIPT COMMAND:")
-        print(draugr_command1)
-
-        print("EXECUTE SUSHI SCRIPT COMMAND:")
-        print(draugr_command2)
 
         os.system(draugr_command1)
         time.sleep(1)
@@ -536,6 +645,56 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
         return None, False, True, False, False
 
     return None, False, False, False, False
+
+
+# --- Disable Submit buttons when no orders selected ---
+
+@app.callback(
+    Output('draugr-button', 'disabled'),
+    Input('draugr-dropdown', 'value'),
+)
+def toggle_submit_button(orders):
+    return not orders
+
+
+@app.callback(
+    Output('draugr-button-2', 'disabled'),
+    Input('draugr-dropdown-2', 'value'),
+)
+def toggle_submit_button_2(orders):
+    return not orders
+
+
+# --- Sidebar visibility: show on DMX + Documentation, hide elsewhere ---
+
+@app.callback(
+    [
+        Output("sidebar-col", "style"),
+        Output("content-col", "width"),
+        Output("submit-btn-wrapper", "style"),
+        Output("goto-btn-wrapper", "style"),
+    ],
+    [Input("tabs", "active_tab")]
+)
+def toggle_sidebar_visibility(active_tab):
+    if active_tab == "dmx":
+        return {}, 9, {}, {"display": "none"}
+    elif active_tab == "documentation":
+        return {}, 9, {"display": "none"}, {}
+    else:
+        return {"display": "none"}, 12, {"display": "none"}, {"display": "none"}
+
+
+# --- "Go to Submission" button: navigate back to DMX tab ---
+
+@app.callback(
+    Output("tabs", "active_tab"),
+    Input("goto-submission-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def goto_submission_tab(n_clicks):
+    return "dmx"
+
 
 if __name__ == '__main__':
     app.run(debug=False, port=PORT, host=HOST)
