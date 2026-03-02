@@ -13,4 +13,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-bfabric-web-apps = { path = "../bfabric-web-apps", editable = true }
+bfabric-web-apps = { git = "https://gitlab.bfabric.org/bfabricpublic/bfabricwebapps/bfabric-web-apps" }
