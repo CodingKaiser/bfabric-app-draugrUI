@@ -215,7 +215,7 @@ app.layout = html.Div(
                                 html.Div(
                                     children=[
                                         html.P(
-                                            "Run Processing UI",
+                                            "DraugrUI",
                                             style={
                                                 'color': '#ffffff',
                                                 'margin-top': '15px',
