@@ -7,7 +7,7 @@ Layout structure:
   - Banner (black bar with app title)
   - Header row (run name, B-Fabric Entity link, View Logs link)
   - Persistent DMX sidebar (always in DOM; hidden/shown per tab via callback)
-  - Flat tab row: Draugr/DMX | Raw Data | Fastq Reports | Documentation | Report a Bug
+  - Flat tab row: Draugr/DMX | Sushify | Documentation | Report a Bug
 
 Callback responsibilities:
   - display_page       : validate token, fetch run data, populate stores
@@ -25,6 +25,7 @@ from dash import Input, Output, State, html, dcc, callback_context as ctx
 import dash_bootstrap_components as dbc
 import os
 import time
+import base64
 
 from bfabric_web_apps import (
     create_app,
@@ -51,6 +52,11 @@ from utils.run_data import fetch_run_entity_data
 # ==================== (1) App ====================
 
 app = create_app(title="DraugrUI")
+
+# Load logo as base64
+_logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'K_draugr_2_HQ-04_inverted.png')
+with open(_logo_path, 'rb') as f:
+    logo_base64 = base64.b64encode(f.read()).decode('utf-8')
 
 # ==================== (2) Layout ====================
 
@@ -175,8 +181,8 @@ tab_list = [
                 width=9,
             ),
         ], style={"margin-top": "0px", "min-height": "40vh"}),
-        label="Fastq Reports",
-        tab_id="fastq-reports",
+        label="Sushify",
+        tab_id="sushify",
     ),
     dbc.Tab(
         html.Div(
@@ -214,19 +220,30 @@ app.layout = html.Div(
                             children=[
                                 html.Div(
                                     children=[
-                                        html.P(
+                                        html.Img(
+                                            src=f'data:image/png;base64,{logo_base64}',
+                                            style={
+                                                'height': '60px',
+                                                'margin-left': '20px',
+                                                'margin-right': '10px'
+                                            }
+                                        ),
+                                        html.Span(
                                             "DraugrUI",
                                             style={
                                                 'color': '#ffffff',
-                                                'margin-top': '15px',
-                                                'height': '80px',
-                                                'width': '100%',
                                                 'font-size': '40px',
-                                                'margin-left': '20px'
+                                                'vertical-align': 'middle'
                                             }
                                         )
                                     ],
-                                    style={"background-color": "#000000", "border-radius": "10px"}
+                                    style={
+                                        "background-color": "#000000",
+                                        "border-radius": "10px",
+                                        "display": "flex",
+                                        "align-items": "center",
+                                        "height": "80px"
+                                    }
                                 ),
                             ],
                             style={"position": "relative", "padding": "10px"}

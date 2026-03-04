@@ -81,8 +81,8 @@ modal = html.Div([
 
 modal2 = html.Div([
     dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Ready to Prepare Fastq Reports?")),
-        dbc.ModalBody("Are you sure you're ready to begin preparing FastqScreen and FastQC reports?"),
+        dbc.ModalHeader(dbc.ModalTitle("Ready to Sushify?")),
+        dbc.ModalBody("Are you sure you're ready to sushify?"),
         dbc.ModalFooter(
             dbc.Button("Yes!", id="close2", className="ms-auto", n_clicks=0)
         ),

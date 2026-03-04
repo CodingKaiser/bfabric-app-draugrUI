@@ -34,7 +34,7 @@ bfabric-app-draugrUI/
 ### `index.py`
 The main application file. Contains:
 - **App initialisation** via `bfabric_web_apps.create_app()`
-- **Layout** — banner, header (B-Fabric entity link + View Logs), persistent DMX sidebar, and a flat tab structure (DMX, Raw Data, Fastq Reports, Documentation, Report a Bug)
+- **Layout** — banner, header (B-Fabric entity link + View Logs), persistent DMX sidebar, and a flat tab structure (DMX, Raw Data, Sushify, Documentation, Report a Bug)
 - **Callbacks** — authentication/token validation, dropdown population, lane card display, modal toggles, Draugr/Sushi command execution, sidebar visibility toggling, and submit-button enable/disable logic
 
 ### `utils/bfabric_utils.py`
@@ -47,7 +47,7 @@ Wraps the `bfabric` Python library with helpers used throughout the app:
 All domain-specific Dash/HTML components:
 - `lane_card()` — renders a single sequencing lane as a Bootstrap card
 - `default_sidebar` — DMX options: order dropdown, boolean switches (Wizard, Multiome, Skip flags), custom flag inputs
-- `sushi_sidebar` — order dropdown + submit button for the Fastq Reports tab
+- `sushi_sidebar` — order dropdown + submit button for the Sushify tab
 - `modal`, `modal2` — confirmation dialogs shown before executing commands
 - `documentation_content` — the HTML content rendered in the Documentation tab
 
@@ -110,7 +110,7 @@ Navigate to the B-Fabric test (or production) server, open a sequencing **Run** 
 | Tab | Purpose |
 |---|---|
 | **Draugr / DMX** | Configure options and launch a Draugr demultiplexing run |
-| **Fastq Reports** | Trigger FastQC and FastQScreen reports via the Sushi pipeline |
+| **Sushify** | Trigger FastQC and FastQScreen reports via the Sushi pipeline |
 | **Documentation** | In-app usage guide for all options and flags |
 | **Report a Bug** | Submit a bug report (stored as a log entry in B-Fabric) |
 
