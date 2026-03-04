@@ -73,7 +73,6 @@ Returns the lane-to-container mapping, server location, and data folder name nee
 
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/) (recommended package manager)
-- A local editable install of `bfabric-web-apps` at `../bfabric-web-apps`
 - B-Fabric power-user credentials at `~/.bfabricpy.yml`
 
 ### 1. Clone and install
@@ -111,7 +110,6 @@ Navigate to the B-Fabric test (or production) server, open a sequencing **Run** 
 | Tab | Purpose |
 |---|---|
 | **Draugr / DMX** | Configure options and launch a Draugr demultiplexing run |
-| **Raw Data** | Disabled — planned for a future Draugr release |
 | **Fastq Reports** | Trigger FastQC and FastQScreen reports via the Sushi pipeline |
 | **Documentation** | In-app usage guide for all options and flags |
 | **Report a Bug** | Submit a bug report (stored as a log entry in B-Fabric) |
