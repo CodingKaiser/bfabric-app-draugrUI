@@ -144,12 +144,7 @@ documentation_content = [
         html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
         html.Br(), html.Br(),
     ], style={"margin-left": "2vw"}),
-    html.H4("Prepare Raw Data Tab"),
-    html.P([
-        "This tab is currently disabled, and will be enabled in a future release, after raw-data processing is added to draugr."
-    ], style={"margin-left": "2vw"}),
-    html.Br(),
-    html.H4("Sushify Tab"),
+        html.H4("Sushify Tab"),
     html.P([
         html.B("Select Orders to Sushify --"),
         " Select the order(s) for which you'd like to re-trigger sushification. After clicking \"submit\" and confirming your submission, DraugrUI will send a request to the sushi server to begin creating fastqc and fastqscreen reports. Order statuses will be updated at this stage as well. ",

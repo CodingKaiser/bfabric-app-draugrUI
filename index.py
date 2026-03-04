@@ -127,14 +127,16 @@ main_content = html.Div([
         "E.g. \"--i1-cycles 8;--r2-cycles 40\"",
         target="bases2fastq-input",
     ),
-    # Tooltips on Submit button wrappers (visible even when buttons are disabled)
+    # Tooltips on Submit button wrappers
     dbc.Tooltip(
         "Select at least one order from the dropdown above to enable submission.",
         target="submit-btn-wrapper",
+        id="submit-tooltip-1",
     ),
     dbc.Tooltip(
         "Select at least one order from the dropdown above to enable submission.",
         target="submit-btn-wrapper-2",
+        id="submit-tooltip-2",
     ),
 
     # Hidden div for command execution output
@@ -148,23 +150,29 @@ main_content = html.Div([
     dcc.Store(id='run_data', storage_type='session'),
 ])
 
-# Persistent DMX sidebar (lives outside tabs so values survive tab switching).
-# Uses all controls from default_sidebar except the Submit button (last item),
-# then adds both action buttons — only one visible at a time.
+# Sidebar and Tab content definitions
 _sidebar_style = {"border-right": "2px solid #d4d7d9", "height": "100%", "padding": "20px", "font-size": "20px"}
 
-sidebar_children = default_sidebar[:-1] + [
-    html.Div(id="submit-btn-wrapper",   children=dbc.Button('Submit', id='draugr-button')),
-    html.Div(id="goto-btn-wrapper",     children=dbc.Button('Go to Submission ›', id='goto-submission-btn', color="info"),
-             style={"display": "none"}),
+# DMX sidebar content
+dmx_sidebar = default_sidebar[:-1] + [
+    html.Div(id="submit-btn-wrapper", children=dbc.Button('Submit', id='draugr-button')),
 ]
 
-# Tab content — no sidebar inside DMX or Documentation; Fastq keeps its own sushi sidebar
+# Tab content — sidebar is now inside DMX and Sushi tabs
 tab_list = [
     dbc.Tab(
-        dcc.Loading(
-            html.Div(id="lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
-        ),
+        dbc.Row([
+            dbc.Col(
+                html.Div(children=dmx_sidebar, style=_sidebar_style),
+                width=3,
+            ),
+            dbc.Col(
+                dcc.Loading(
+                    html.Div(id="lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
+                ),
+                width=9,
+            ),
+        ], style={"margin-top": "0px", "min-height": "40vh"}),
         label="Draugr / DMX",
         tab_id="dmx",
     ),
@@ -185,16 +193,30 @@ tab_list = [
         tab_id="sushify",
     ),
     dbc.Tab(
-        html.Div(
-            children=documentation_content,
-            style={"margin-top": "10px", "margin-left": "2vw", "font-size": "20px",
-                   "padding-right": "40px", "overflow-y": "scroll", "max-height": "60vh"},
+        dbc.Row(
+            dbc.Col(
+                html.Div(
+                    children=documentation_content,
+                    style={"margin-top": "10px", "font-size": "20px",
+                           "padding-right": "40px", "overflow-y": "scroll", "max-height": "60vh"},
+                ),
+                width=8,
+            ),
+            justify="center",
+            style={"margin-top": "20px"}
         ),
         label="Documentation",
         tab_id="documentation",
     ),
     dbc.Tab(
-        dcc.Loading(get_report_bug_tab()),
+        dbc.Row(
+            dbc.Col(
+                dcc.Loading(get_report_bug_tab()),
+                width=8,
+            ),
+            justify="center",
+            style={"margin-top": "20px"}
+        ),
         label="Report a Bug",
         tab_id="report-bug",
     ),
@@ -377,34 +399,14 @@ app.layout = html.Div(
                     children=main_content,
                 ),
 
-                # Persistent sidebar + tabs (shown/hidden together by auth callback)
+                # Tabs (shown/hidden together by auth callback)
                 html.Div(
                     id="tabs-container",
                     children=[
                         dbc.Row([
-                            # Sidebar: visible only on DMX and Documentation tabs
-                            dbc.Col(
-                                html.Div(
-                                    id="sidebar-container",
-                                    children=sidebar_children,
-                                    style={
-                                        "border-right": "2px solid #d4d7d9",
-                                        "padding": "20px",
-                                        "font-size": "20px",
-                                        "position": "sticky",
-                                        "top": "0",
-                                        "overflow-y": "auto",
-                                        "max-height": "100vh",
-                                    },
-                                ),
-                                id="sidebar-col",
-                                width=3,
-                            ),
-                            # Tab content: expands to full width when sidebar is hidden
                             dbc.Col(
                                 dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
-                                id="content-col",
-                                width=9,
+                                width=12,
                             ),
                         ], style={"margin-top": "0px", "min-height": "40vh"}),
                     ]
@@ -658,53 +660,28 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
     return None, False, False, False, False
 
 
-# --- Disable Submit buttons when no orders selected ---
+# --- Disable Submit buttons and Tooltips when no orders selected ---
 
 @app.callback(
-    Output('draugr-button', 'disabled'),
+    [Output('draugr-button', 'disabled'),
+     Output('submit-tooltip-1', 'disabled')],
     Input('draugr-dropdown', 'value'),
 )
 def toggle_submit_button(orders):
-    return not orders
+    is_disabled = not orders
+    # Tooltip is disabled (hidden) when button is enabled (not disabled)
+    return is_disabled, not is_disabled
 
 
 @app.callback(
-    Output('draugr-button-2', 'disabled'),
+    [Output('draugr-button-2', 'disabled'),
+     Output('submit-tooltip-2', 'disabled')],
     Input('draugr-dropdown-2', 'value'),
 )
 def toggle_submit_button_2(orders):
-    return not orders
-
-
-# --- Sidebar visibility: show on DMX + Documentation, hide elsewhere ---
-
-@app.callback(
-    [
-        Output("sidebar-col", "style"),
-        Output("content-col", "width"),
-        Output("submit-btn-wrapper", "style"),
-        Output("goto-btn-wrapper", "style"),
-    ],
-    [Input("tabs", "active_tab")]
-)
-def toggle_sidebar_visibility(active_tab):
-    if active_tab == "dmx":
-        return {}, 9, {}, {"display": "none"}
-    elif active_tab == "documentation":
-        return {}, 9, {"display": "none"}, {}
-    else:
-        return {"display": "none"}, 12, {"display": "none"}, {"display": "none"}
-
-
-# --- "Go to Submission" button: navigate back to DMX tab ---
-
-@app.callback(
-    Output("tabs", "active_tab"),
-    Input("goto-submission-btn", "n_clicks"),
-    prevent_initial_call=True
-)
-def goto_submission_tab(n_clicks):
-    return "dmx"
+    is_disabled = not orders
+    # Tooltip is disabled (hidden) when button is enabled (not disabled)
+    return is_disabled, not is_disabled
 
 
 if __name__ == '__main__':
