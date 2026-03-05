@@ -692,4 +692,4 @@ def toggle_submit_button_2(orders):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=PORT, host=HOST)
+    app.run(debug=False, port=PORT, host=HOST)
