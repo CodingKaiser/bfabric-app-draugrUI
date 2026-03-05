@@ -167,9 +167,7 @@ tab_list = [
                 width=3,
             ),
             dbc.Col(
-                dcc.Loading(
-                    html.Div(id="lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
-                ),
+                html.Div(id="lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
                 width=9,
             ),
         ], style={"margin-top": "0px", "min-height": "40vh"}),
@@ -183,9 +181,7 @@ tab_list = [
                 width=3,
             ),
             dbc.Col(
-                dcc.Loading(
-                    html.Div(id="sushi-lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
-                ),
+                html.Div(id="sushi-lane-display", style={"margin-top": "2vh", "margin-left": "2vw", "font-size": "20px"}),
                 width=9,
             ),
         ], style={"margin-top": "0px", "min-height": "40vh"}),
@@ -211,7 +207,7 @@ tab_list = [
     dbc.Tab(
         dbc.Row(
             dbc.Col(
-                dcc.Loading(get_report_bug_tab()),
+                get_report_bug_tab(),
                 width=8,
             ),
             justify="center",
@@ -386,29 +382,38 @@ app.layout = html.Div(
                     ])
                 ),
 
-                # Auth message container (shown when not authenticated)
-                html.Div(
-                    id="auth-message-container",
-                    children=[],
-                    style={"display": "none", "padding": "40px", "margin-top": "20px"}
-                ),
-
-                # Main content container (alerts, tooltips, modals, store - always in DOM)
-                html.Div(
-                    id="main-content-container",
-                    children=main_content,
-                ),
-
-                # Tabs (shown/hidden together by auth callback)
-                html.Div(
-                    id="tabs-container",
+                # Main app area wrapped in global loading
+                dcc.Loading(
+                    id="global-loading",
+                    type="circle",
+                    display="show",
+                    overlay_style={"filter": "blur(2px)"},
                     children=[
-                        dbc.Row([
-                            dbc.Col(
-                                dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
-                                width=12,
-                            ),
-                        ], style={"margin-top": "0px", "min-height": "40vh"}),
+                        # Auth message container (shown when not authenticated)
+                        html.Div(
+                            id="auth-message-container",
+                            children=[],
+                            style={"display": "none", "padding": "40px", "margin-top": "20px"}
+                        ),
+
+                        # Main content container (alerts, tooltips, modals, store - always in DOM)
+                        html.Div(
+                            id="main-content-container",
+                            children=main_content,
+                        ),
+
+                        # Tabs (shown/hidden together by auth callback)
+                        html.Div(
+                            id="tabs-container",
+                            children=[
+                                dbc.Row([
+                                    dbc.Col(
+                                        dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
+                                        width=12,
+                                    ),
+                                ], style={"margin-top": "0px", "min-height": "40vh"}),
+                            ]
+                        ),
                     ]
                 ),
             ],
