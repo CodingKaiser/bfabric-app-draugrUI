@@ -24,6 +24,7 @@ Callback responsibilities:
 import base64
 import os
 import time
+import tomllib
 
 import dash_bootstrap_components as dbc
 from bfabric_web_apps import (
@@ -48,6 +49,11 @@ from utils.components import (
     sushi_sidebar,
 )
 from utils.run_data import fetch_run_entity_data
+
+# Load version from pyproject.toml
+with open("pyproject.toml", "rb") as f:
+    pyproject_data = tomllib.load(f)
+    app_version = pyproject_data.get("project", {}).get("version", "unknown")
 
 # ==================== (1) App ====================
 
@@ -285,6 +291,17 @@ app.layout = html.Div(
                                                 "color": "#ffffff",
                                                 "font-size": "40px",
                                                 "vertical-align": "middle",
+                                            },
+                                        ),
+                                        html.Span(
+                                            f"v{app_version}",
+                                            style={
+                                                "color": "#ffffff",
+                                                "font-size": "12px",
+                                                "margin-left": "auto",
+                                                "margin-right": "20px",
+                                                "align-self": "flex-end",
+                                                "padding-bottom": "15px",
                                             },
                                         ),
                                     ],
