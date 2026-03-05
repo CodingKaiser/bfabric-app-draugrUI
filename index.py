@@ -145,9 +145,6 @@ main_content = html.Div([
     # Confirmation modals
     modal,
     modal2,
-
-    # Store for run-specific entity data (lanes, containers, server, datafolder)
-    dcc.Store(id='run_data', storage_type='session'),
 ])
 
 # Sidebar and Tab content definitions
@@ -227,6 +224,7 @@ app.layout = html.Div(
         dcc.Store(id='app_data', storage_type='session'),
         dcc.Store(id='token_data', storage_type='session'),
         dcc.Store(id='dynamic-link-store', storage_type='session'),
+        dcc.Store(id='run_data', storage_type='session'),
 
         dbc.Container(
             children=[
@@ -382,39 +380,37 @@ app.layout = html.Div(
                     ])
                 ),
 
-                # Main app area wrapped in global loading
+                # Main app area
+                # Auth message container (shown when not authenticated)
+                html.Div(
+                    id="auth-message-container",
+                    children=[],
+                    style={"display": "none", "padding": "40px", "margin-top": "20px"}
+                ),
+
+                # Main content container (alerts, tooltips, modals, store - always in DOM)
+                html.Div(
+                    id="main-content-container",
+                    children=main_content,
+                ),
+
+                # Tabs (shown/hidden together by auth callback) wrapped in loading
                 dcc.Loading(
                     id="global-loading",
                     type="circle",
-                    display="show",
                     overlay_style={"filter": "blur(2px)"},
-                    children=[
-                        # Auth message container (shown when not authenticated)
-                        html.Div(
-                            id="auth-message-container",
-                            children=[],
-                            style={"display": "none", "padding": "40px", "margin-top": "20px"}
-                        ),
-
-                        # Main content container (alerts, tooltips, modals, store - always in DOM)
-                        html.Div(
-                            id="main-content-container",
-                            children=main_content,
-                        ),
-
-                        # Tabs (shown/hidden together by auth callback)
-                        html.Div(
-                            id="tabs-container",
-                            children=[
-                                dbc.Row([
-                                    dbc.Col(
-                                        dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
-                                        width=12,
-                                    ),
-                                ], style={"margin-top": "0px", "min-height": "40vh"}),
-                            ]
-                        ),
-                    ]
+                    parent_style={"position": "relative"},
+                    children=html.Div(
+                        id="tabs-container",
+                        children=[
+                            dbc.Row([
+                                dbc.Col(
+                                    dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
+                                    width=12,
+                                ),
+                            ], style={"margin-top": "0px", "min-height": "40vh"}),
+                        ]
+                    ),
                 ),
             ],
             fluid=True,
@@ -436,7 +432,6 @@ app.layout = html.Div(
         Output('entity', 'data'),
         Output('app_data', 'data'),
         Output('page-title', 'children'),
-        Output('session-details', 'children'),
         Output('dynamic-link', 'href'),
         Output('bfabric-entity-link', 'href'),
         Output('run_data', 'data'),
@@ -458,7 +453,6 @@ def display_page(url_params):
         entity_data,
         app_data,
         page_title or " ",
-        session_details or [],
         job_link or "#",
         entity_link or "#",
         run_data,
@@ -475,7 +469,6 @@ register_auth_callback(app, main_content=main_content)
 @app.callback(
     Output('draugr-dropdown', 'options'),
     [Input('run_data', 'data')],
-    prevent_initial_call=True
 )
 def update_dmx_dropdown(run_data):
     if not run_data:
@@ -487,7 +480,6 @@ def update_dmx_dropdown(run_data):
 @app.callback(
     Output('draugr-dropdown-2', 'options'),
     [Input('run_data', 'data')],
-    prevent_initial_call=True
 )
 def update_sushi_dropdown(run_data):
     if not run_data:
@@ -502,7 +494,6 @@ def update_sushi_dropdown(run_data):
     [Output('lane-display', 'children'),
      Output('sushi-lane-display', 'children')],
     [Input('run_data', 'data')],
-    prevent_initial_call=True
 )
 def update_lane_display(run_data):
     if not run_data or 'lanes' not in run_data:
@@ -669,25 +660,25 @@ def execute_draugr_command(n_clicks, n_clicks2, orders, gstore, skip_postprocess
 
 @app.callback(
     [Output('draugr-button', 'disabled'),
-     Output('submit-tooltip-1', 'disabled')],
+     Output('submit-tooltip-1', 'className')],
     Input('draugr-dropdown', 'value'),
 )
 def toggle_submit_button(orders):
     is_disabled = not orders
-    # Tooltip is disabled (hidden) when button is enabled (not disabled)
-    return is_disabled, not is_disabled
+    # Tooltip is hidden (d-none) when button is enabled (not disabled)
+    return is_disabled, "" if is_disabled else "d-none"
 
 
 @app.callback(
     [Output('draugr-button-2', 'disabled'),
-     Output('submit-tooltip-2', 'disabled')],
+     Output('submit-tooltip-2', 'className')],
     Input('draugr-dropdown-2', 'value'),
 )
 def toggle_submit_button_2(orders):
     is_disabled = not orders
-    # Tooltip is disabled (hidden) when button is enabled (not disabled)
-    return is_disabled, not is_disabled
+    # Tooltip is hidden (d-none) when button is enabled (not disabled)
+    return is_disabled, "" if is_disabled else "d-none"
 
 
 if __name__ == '__main__':
-    app.run(debug=False, port=PORT, host=HOST)
+    app.run(debug=True, port=PORT, host=HOST)
