@@ -281,6 +281,15 @@ app.layout = html.Div(
                                     }
                                 ),
                                 html.Div(
+                                    id="session-details",
+                                    children=[],
+                                    style={
+                                        "margin-left": "20px",
+                                        "font-size": "14px",
+                                        "color": "#666"
+                                    }
+                                ),
+                                html.Div(
                                     children=[
                                         html.Div(
                                             children=[
@@ -432,6 +441,7 @@ app.layout = html.Div(
         Output('entity', 'data'),
         Output('app_data', 'data'),
         Output('page-title', 'children'),
+        Output('session-details', 'children'),
         Output('dynamic-link', 'href'),
         Output('bfabric-entity-link', 'href'),
         Output('run_data', 'data'),
@@ -453,6 +463,7 @@ def display_page(url_params):
         entity_data,
         app_data,
         page_title or " ",
+        session_details or [],
         job_link or "#",
         entity_link or "#",
         run_data,
