@@ -13,7 +13,7 @@ import dash_daq as daq
 
 # ==================== Lane Cards ====================
 
-def lane_card(lane_position, container_ids):
+def lane_card(lane_position, container_ids, highlight=False):
     card_content = [
         dbc.CardHeader(f"Lane {lane_position}"),
         dbc.CardBody(
@@ -22,7 +22,12 @@ def lane_card(lane_position, container_ids):
             else html.P("[None Assigned]", style={"color": "gray"})
         ),
     ]
-    return dbc.Card(card_content, style={"max-width": "25vw", "margin": "10px"})
+    style = {"max-width": "25vw", "margin": "10px"}
+    if highlight:
+        style["border"] = "4px solid #007bff"
+        style["background-color"] = "rgba(0, 123, 255, 0.1)"
+    
+    return dbc.Card(card_content, style=style)
 
 
 # ==================== Sidebars ====================

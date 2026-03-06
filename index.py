@@ -452,26 +452,20 @@ app.layout = html.Div(
                     id="main-content-container",
                     children=main_content,
                 ),
-                # Tabs (shown/hidden together by auth callback) wrapped in loading
-                dcc.Loading(
-                    id="global-loading",
-                    type="circle",
-                    overlay_style={"filter": "blur(2px)"},
-                    parent_style={"position": "relative"},
-                    children=html.Div(
-                        id="tabs-container",
-                        children=[
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
-                                        width=12,
-                                    ),
-                                ],
-                                style={"margin-top": "0px", "min-height": "40vh"},
-                            ),
-                        ],
-                    ),
+                # Tabs (shown/hidden together by auth callback)
+                html.Div(
+                    id="tabs-container",
+                    children=[
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Tabs(tab_list, id="tabs", active_tab="dmx"),
+                                    width=12,
+                                ),
+                            ],
+                            style={"margin-top": "0px", "min-height": "40vh"},
+                        ),
+                    ],
                 ),
             ],
             fluid=True,
@@ -571,13 +565,25 @@ def update_sushi_dropdown(run_data):
 
 @app.callback(
     [Output("lane-display", "children"), Output("sushi-lane-display", "children")],
-    [Input("run_data", "data")],
+    [
+        Input("run_data", "data"),
+        Input("draugr-dropdown", "value"),
+        Input("draugr-dropdown-2", "value"),
+        Input("tabs", "active_tab"),
+    ],
 )
-def update_lane_display(run_data):
+def update_lane_display(run_data, selected_orders, selected_orders_2, active_tab):
     if not run_data or "lanes" not in run_data:
         return [], []
 
     lanes = run_data["lanes"]
+    selected = selected_orders if active_tab == "dmx" else selected_orders_2
+    selected_set = set(str(s) for s in (selected or []))
+
+    def make_lane_card(pos, ids):
+        # ids is a list of strings like "12345 OrderName"
+        highlight = any(str(order_str).split(" ")[0] in selected_set for order_str in ids)
+        return lane_card(lane_position=pos, container_ids=ids, highlight=highlight)
 
     if len(lanes) != 8:
         container = dbc.Container(
@@ -586,7 +592,7 @@ def update_lane_display(run_data):
                     [
                         dbc.Col(
                             [
-                                lane_card(lane_position=pos, container_ids=ids)
+                                make_lane_card(pos, ids)
                                 for pos, ids in lanes.items()
                             ]
                         )
@@ -601,13 +607,13 @@ def update_lane_display(run_data):
                     [
                         dbc.Col(
                             [
-                                lane_card(lane_position=i, container_ids=lanes[str(i)])
+                                make_lane_card(i, lanes[str(i)])
                                 for i in range(1, 5)
                             ]
                         ),
                         dbc.Col(
                             [
-                                lane_card(lane_position=i, container_ids=lanes[str(i)])
+                                make_lane_card(i, lanes[str(i)])
                                 for i in range(5, 9)
                             ]
                         ),

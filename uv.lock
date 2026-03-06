@@ -242,7 +242,7 @@ wheels = [
 
 [[package]]
 name = "draugrui"
-version = "2.1.0"
+version = "2.1.2"
 source = { virtual = "." }
 dependencies = [
     { name = "bfabric-web-apps" },
