@@ -66,11 +66,11 @@ def generate_draugr_command(
     if is_multiome:
         draugr_command += " --is-multiome-run"
     if bcl_flags:
-        draugr_command += " --custom-bcl2fastq-flags " + bcl_flags
+        draugr_command += ' --custom-bcl2fastq-flags "' + bcl_flags.replace('"', '\\"') + '"'
     if cellranger_flags:
-        draugr_command += " --custom-cellranger-flags " + cellranger_flags
+        draugr_command += ' --custom-cellranger-flags "' + cellranger_flags.replace('"', '\\"') + '"'
     if bases2fastq_flags:
-        draugr_command += " --custom-bases2fastq-flags " + bases2fastq_flags
+        draugr_command += ' --custom-bases2fastq-flags "' + bases2fastq_flags.replace('"', '\\"') + '"'
 
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
