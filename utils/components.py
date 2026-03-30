@@ -47,12 +47,10 @@ default_sidebar = [
     html.P("Select Orders to DMX", id="sidebar_text"),
     dcc.Dropdown([], id='draugr-dropdown', multi=True),
     html.Br(),
-    html.Div([_label("Disable Wizard", "tip-wizard"),  daq.BooleanSwitch(id='wizard', on=False)],          style=_switch_row_style),
-    html.Div([_label("Is Multiome",    "tip-multiome"),daq.BooleanSwitch(id='multiome', on=False)],        style=_switch_row_style),
+    html.Div([_label("Disable Wizard", "tip-wizard"),  daq.BooleanSwitch(id='wizard', on=False)], style=_switch_row_style),
+    html.Div([_label("Skip RawQC",    "tip-skip-raw-qc"),daq.BooleanSwitch(id='skip-raw-qc', on=True)], style=_switch_row_style),
     html.Br(),
     dbc.Input(value="", placeholder='Custom Bcl2fastq flags', id='bcl-input'),
-    html.Br(),
-    dbc.Input(value="", placeholder='Custom Cellranger flags', id='cellranger-input'),
     html.Br(),
     dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
     html.Br(),
@@ -128,20 +126,14 @@ documentation_content = [
         html.B("Disable Wizard --"),
         " The wizard is Draugr's internal automatic-barcode detection and correction engine. If you're confident that the correct barcodes are assigned, or the wizard is creating barcode conflicts while checking new settings, you should turn the wizard off.",
         html.Br(), html.Br(),
-        html.B("Is Multiome --"),
-        " If you're processing a multiome run, select this option.",
+        html.B("Skip RawQC --"),
+        " If you would like to skip generation of the RawQC report, select this option.",
         html.Br(), html.Br(),
         html.B("Custom Bcl2fastq flags --"),
         """ Custom bcl2fastq flags to use for the standard samples wrapped in a
         string, with arguments separated by '|' characters, E.g. "--barcode-
         mismatches 2|--minimum-trimmed-read-length ". For a full list of possible flags, see the """,
         html.A(" bcl2fastq documentation.", href="https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl2fastq/bcl2fastq_letterbooklet_15038058brpmi.pdf", target="_blank"),
-        html.Br(), html.Br(),
-        html.B("Custom Cellranger flags --"),
-        """ Custom cellranger mkfastq flags to use for the 10x samples wrapped in a
-        string, with arguments separated by '|' characters, E.g. "--barcode-
-        mismatches 2|--delete-undetermined". For a full list of possible flags, see the """,
-        html.A("cellranger documentation", href="https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq", target="_blank"),
         html.Br(), html.Br(),
         html.B("Custom Bases2fastq flags --"),
         """ Custom bases2fastq flags to use wrapped in a string, with arguments

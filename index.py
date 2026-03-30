@@ -111,10 +111,8 @@ main_content = html.Div(
             target="tip-wizard",
         ),
         dbc.Tooltip(
-            "For single-index 10X samples, determines if we should run in multiome-mode "
-            "(with CellRangerARC) or with the default program (CellRanger). "
-            "Overrides B-Fabric-derived information.",
-            target="tip-multiome",
+            "Disable generation of the RawQC report.",
+            target="tip-skip-raw-qc",
         ),
         dbc.Tooltip("Will skip copying files to gstore.", target="tip-gstore"),
         dbc.Tooltip(
@@ -127,11 +125,6 @@ main_content = html.Div(
             "Custom bcl2fastq flags wrapped in a string, arguments separated by '|'. "
             'E.g. "--barcode-mismatches 2|--minimum-trimmed-read-length"',
             target="bcl-input",
-        ),
-        dbc.Tooltip(
-            "Custom cellranger mkfastq flags wrapped in a string, arguments separated by '|'. "
-            'E.g. "--barcode-mismatches 2|--delete-undetermined"',
-            target="cellranger-input",
         ),
         dbc.Tooltip(
             "Custom bases2fastq flags wrapped in a string, arguments separated by ';'. "
@@ -671,9 +664,8 @@ def toggle_modal2(n1, n2, is_open):
         State("skip-postprocessing", "on"),
         State("skip-demux", "on"),
         State("wizard", "on"),
-        State("multiome", "on"),
+        State("skip-raw-qc", "on"),
         State("bcl-input", "value"),
-        State("cellranger-input", "value"),
         State("bases2fastq-input", "value"),
         State("token_data", "data"),
         State("run_data", "data"),
@@ -689,9 +681,8 @@ def execute_draugr_command(
     skip_postprocessing,
     skip_demux,
     wizard,
-    multiome,
+    skip_raw_qc,
     bcl_flags,
-    cellranger_flags,
     bases2fastq_flags,
     token_data,
     run_data,
@@ -717,9 +708,8 @@ def execute_draugr_command(
             skip_postprocessing=skip_postprocessing,
             skip_demux=skip_demux,
             disable_wizard=wizard,
-            is_multiome=multiome,
+            skip_raw_qc=skip_raw_qc,
             bcl_flags=bcl_flags,
-            cellranger_flags=cellranger_flags,
             bases2fastq_flags=bases2fastq_flags,
         )
 

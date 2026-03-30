@@ -29,9 +29,8 @@ def generate_draugr_command(
     skip_postprocessing=False,
     skip_demux=False,
     disable_wizard=False,
-    is_multiome=False,
+    skip_raw_qc=False,
     bcl_flags=None,
-    cellranger_flags=None,
     bases2fastq_flags=None
 ):
     """
@@ -45,9 +44,8 @@ def generate_draugr_command(
         skip_postprocessing (bool): Skip post-demultiplexing processing.
         skip_demux (bool): Skip demultiplexing step.
         disable_wizard (bool): Disable the wizard.
-        is_multiome (bool): Enable multiome mode.
+        skip_raw_qc (bool): Skip generation of RawQC report.
         bcl_flags (str): Custom Bcl2fastq flags.
-        cellranger_flags (str): Custom Cellranger flags.
         bases2fastq_flags (str): Custom Bases2fastq flags.
 
     Returns:
@@ -63,12 +61,10 @@ def generate_draugr_command(
         draugr_command += " --skip-demux"
     if disable_wizard:
         draugr_command += " --disable-wizard"
-    if is_multiome:
-        draugr_command += " --is-multiome-run"
+    if skip_raw_qc:
+        draugr_command += " -xq"
     if bcl_flags:
         draugr_command += ' --custom-bcl2fastq-flags "' + bcl_flags.replace('"', '\\"') + '"'
-    if cellranger_flags:
-        draugr_command += ' --custom-cellranger-flags "' + cellranger_flags.replace('"', '\\"') + '"'
     if bases2fastq_flags:
         draugr_command += ' --custom-bases2fastq-flags "' + bases2fastq_flags.replace('"', '\\"') + '"'
 
@@ -76,9 +72,8 @@ def generate_draugr_command(
 
     set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
     lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    # CONDA_SETUP = ". /usr/local/ngseq/miniconda3/etc/profile.d/conda.sh && conda activate gi_py3.11.5 &&"
     conda_setup = "module load Dev/Python && conda activate gi_py3.11.5 &&"
-    module_load = "module load Tools/bcl2fastq && module load Aligner/CellRanger && module load Aligner/CellRangerARC && module load Tools/Bases2Fastq"
+    module_load = "module load Tools/bcl2fastq && module load Tools/Bases2Fastq"
 
     prefix = f"{set_environ} {lmod_setup} {conda_setup} {module_load}"
 
