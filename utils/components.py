@@ -47,7 +47,7 @@ default_sidebar = [
     html.P("Select Orders to DMX", id="sidebar_text"),
     dcc.Dropdown([], id='draugr-dropdown', multi=True),
     html.Br(),
-    html.Div([_label("Disable Wizard", "tip-wizard"),  daq.BooleanSwitch(id='wizard', on=False)], style=_switch_row_style),
+    html.Div([_label("Disable Wizard", "tip-disable-wizard"),  daq.BooleanSwitch(id='disable-wizard', on=False)], style=_switch_row_style),
     html.Div([_label("Skip RawQC",    "tip-skip-raw-qc"),daq.BooleanSwitch(id='skip-raw-qc', on=True)], style=_switch_row_style),
     html.Br(),
     dbc.Input(value="", placeholder='Custom Bcl2fastq flags', id='bcl-input'),

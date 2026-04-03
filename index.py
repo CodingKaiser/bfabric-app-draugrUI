@@ -108,7 +108,7 @@ main_content = html.Div(
         dbc.Tooltip(
             "Disable the demultiplexing Wizard. None of the samples are tested for "
             "barcode issues and the information from B-Fabric is taken as-is.",
-            target="tip-wizard",
+            target="tip-disable-wizard",
         ),
         dbc.Tooltip(
             "Disable generation of the RawQC report.",
@@ -122,13 +122,15 @@ main_content = html.Div(
         dbc.Tooltip("Skip the demultiplexing step entirely.", target="tip-skip-demux"),
         # Tooltips (inputs — tooltip on the field itself)
         dbc.Tooltip(
-            "Custom bcl2fastq flags wrapped in a string, arguments separated by '|'. "
-            'E.g. "--barcode-mismatches 2|--minimum-trimmed-read-length"',
+            "Custom bcl2fastq flags, arguments separated by '|'. "
+            'E.g. "--barcode-mismatches 2|--minimum-trimmed-read-length". Do not include the '
+            'quotation marks when specifying this option.',
             target="bcl-input",
         ),
         dbc.Tooltip(
-            "Custom bases2fastq flags wrapped in a string, arguments separated by ';'. "
-            'E.g. "--i1-cycles 8;--r2-cycles 40"',
+            "Custom bases2fastq flags, arguments separated by ';'. "
+            'E.g. "--i1-cycles 8;--r2-cycles 40". Do not include the '
+            'quotation marks when specifying this option.',
             target="bases2fastq-input",
         ),
         # Tooltips on Submit button wrappers
@@ -663,7 +665,7 @@ def toggle_modal2(n1, n2, is_open):
         State("gstore", "on"),
         State("skip-postprocessing", "on"),
         State("skip-demux", "on"),
-        State("wizard", "on"),
+        State("disable-wizard", "on"),
         State("skip-raw-qc", "on"),
         State("bcl-input", "value"),
         State("bases2fastq-input", "value"),
@@ -680,7 +682,7 @@ def execute_draugr_command(
     gstore,
     skip_postprocessing,
     skip_demux,
-    wizard,
+    disable_wizard,
     skip_raw_qc,
     bcl_flags,
     bases2fastq_flags,
@@ -707,7 +709,7 @@ def execute_draugr_command(
             skip_gstore=gstore,
             skip_postprocessing=skip_postprocessing,
             skip_demux=skip_demux,
-            disable_wizard=wizard,
+            disable_wizard=disable_wizard,
             skip_raw_qc=skip_raw_qc,
             bcl_flags=bcl_flags,
             bases2fastq_flags=bases2fastq_flags,
