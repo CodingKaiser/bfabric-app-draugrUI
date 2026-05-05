@@ -51,7 +51,8 @@ def generate_draugr_command(
     Returns:
         str: Command string for the Draugr pipeline.
     """
-    draugr_command = f"python /export/local/analyses/draugr_exec/draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/{run_folder} --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets"
+    uv_prefix = "uv run --directory /export/local/analyses/draugr_exec"
+    draugr_command = f"{uv_prefix} draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/{run_folder} --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets"
 
     if skip_gstore:
         draugr_command += " --skip-gstore-copy"
@@ -72,10 +73,8 @@ def generate_draugr_command(
 
     set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
     lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    conda_setup = "module load Dev/Python && conda activate gi_py3.11.5 &&"
-    module_load = "module load Tools/bcl2fastq && module load Tools/Bases2Fastq"
-
-    prefix = f"{set_environ} {lmod_setup} {conda_setup} {module_load}"
+    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Dev/uv"
+    prefix = f"{set_environ} {lmod_setup} {module_load}"
 
     system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
 
