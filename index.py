@@ -715,6 +715,7 @@ def execute_draugr_command(
             bases2fastq_flags=bases2fastq_flags,
         )
 
+        #print(draugr_command)
         os.system(draugr_command)
 
         L.log_operation(
@@ -786,6 +787,33 @@ def toggle_submit_button_2(orders):
     is_disabled = not orders
     # Tooltip is hidden (d-none) when button is enabled (not disabled)
     return is_disabled, "" if is_disabled else "d-none"
+
+
+# --- Reset all switch/input state on each new page load ---
+
+
+@app.callback(
+    [
+        Output("disable-wizard", "on"),
+        Output("skip-raw-qc", "on"),
+        Output("gstore", "on"),
+        Output("skip-postprocessing", "on"),
+        Output("skip-demux", "on"),
+        Output("bcl-input", "value"),
+        Output("bases2fastq-input", "value"),
+        Output("draugr-dropdown", "value"),
+        Output("draugr-dropdown-2", "value"),
+    ],
+    Input("token_data", "data"),
+    prevent_initial_call=False,
+)
+def reset_form_state(_token_data):
+    """Force switch/input props to defaults on every page load.
+
+    Overrides browser form-state restoration, which can cause the visual state
+    of BooleanSwitches to differ from Dash's internal state.
+    """
+    return False, True, False, False, False, "", "", None, None
 
 
 if __name__ == "__main__":
