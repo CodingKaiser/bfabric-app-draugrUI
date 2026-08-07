@@ -133,6 +133,12 @@ main_content = html.Div(
             'quotation marks when specifying this option.',
             target="bases2fastq-input",
         ),
+        dbc.Tooltip(
+            "Custom bclconvert flags, arguments separated by '|'. "
+            'E.g. "--barcode-mismatches 2|--no-lane-splitting true". Do not include the '
+            'quotation marks when specifying this option.',
+            target="bclconvert-input",
+        ),
         # Tooltips on Submit button wrappers
         dbc.Tooltip(
             "Select at least one order from the dropdown above to enable submission.",
@@ -669,6 +675,7 @@ def toggle_modal2(n1, n2, is_open):
         State("skip-raw-qc", "on"),
         State("bcl-input", "value"),
         State("bases2fastq-input", "value"),
+        State("bclconvert-input", "value"),
         State("token_data", "data"),
         State("run_data", "data"),
         State("draugr-dropdown-2", "value"),
@@ -686,6 +693,7 @@ def execute_draugr_command(
     skip_raw_qc,
     bcl_flags,
     bases2fastq_flags,
+    bclconvert_flags,
     token_data,
     run_data,
     orders2,
@@ -713,6 +721,7 @@ def execute_draugr_command(
             skip_raw_qc=skip_raw_qc,
             bcl_flags=bcl_flags,
             bases2fastq_flags=bases2fastq_flags,
+            bclconvert_flags=bclconvert_flags,
         )
 
         #print(draugr_command)
@@ -801,6 +810,7 @@ def toggle_submit_button_2(orders):
         Output("skip-demux", "on"),
         Output("bcl-input", "value"),
         Output("bases2fastq-input", "value"),
+        Output("bclconvert-input", "value"),
         Output("draugr-dropdown", "value"),
         Output("draugr-dropdown-2", "value"),
     ],
@@ -813,7 +823,7 @@ def reset_form_state(_token_data):
     Overrides browser form-state restoration, which can cause the visual state
     of BooleanSwitches to differ from Dash's internal state.
     """
-    return False, True, False, False, False, "", "", None, None
+    return False, True, False, False, False, "", "", "", None, None
 
 
 if __name__ == "__main__":

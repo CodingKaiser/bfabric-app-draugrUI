@@ -54,6 +54,8 @@ default_sidebar = [
     html.Br(),
     dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
     html.Br(),
+    dbc.Input(value="", placeholder='Custom bclconvert flags', id='bclconvert-input'),
+    html.Br(),
     html.P("Advanced Options", style={"font-weight": "bold", "margin-bottom": "4px"}),
     html.Div([_label("Skip GStore Copy",    "tip-gstore"),             daq.BooleanSwitch(id='gstore', on=False)],            style=_switch_row_style),
     html.Div([_label("Skip Postprocessing", "tip-skip-postprocessing"),daq.BooleanSwitch(id='skip-postprocessing', on=False)], style=_switch_row_style),
@@ -139,6 +141,11 @@ documentation_content = [
         """ Custom bases2fastq flags to use wrapped in a string, with arguments
         separated by ';' characters, E.g. "--i1-cycles 8;--r2-cycles 40 ". For a full list of possible flags, see the """,
         html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
+        html.Br(), html.Br(),
+        html.B("Custom bclconvert flags --"),
+        """ Custom bclconvert flags to use for the standard samples, with arguments
+        separated by '|' characters, E.g. "--barcode-mismatches 2|--no-lane-splitting true". For a full list of possible flags, see the """,
+        html.A("bcl-convert documentation", href="https://support.illumina.com/sequencing/sequencing_software/bcl-convert.html", target="_blank"),
         html.Br(), html.Br(),
     ], style={"margin-left": "2vw"}),
         html.H4("Sushify Tab"),

@@ -18,7 +18,24 @@ that the caller passes to os.system().
                                 generate_sushi_command() to find the dataset file.
 """
 
+import shlex
 import subprocess
+
+
+def _format_flag_value(value):
+    """
+    Prepare a user-supplied custom flag string for the remote shell.
+
+    Users often wrap their input in quotes (the documentation shows quoted
+    examples), which previously ended up as literal quote characters inside the
+    argument value. Strip one layer of surrounding quotes, then quote the result
+    for the remote shell that receives the SSH payload.
+    """
+    stripped = value.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
+        stripped = stripped[1:-1].strip()
+
+    return shlex.quote(stripped)
 
 
 def generate_draugr_command(
@@ -31,7 +48,8 @@ def generate_draugr_command(
     disable_wizard=False,
     skip_raw_qc=False,
     bcl_flags=None,
-    bases2fastq_flags=None
+    bases2fastq_flags=None,
+    bclconvert_flags=None
 ):
     """
     Generate a command string for the Draugr pipeline.
@@ -47,6 +65,7 @@ def generate_draugr_command(
         skip_raw_qc (bool): Skip generation of RawQC report.
         bcl_flags (str): Custom Bcl2fastq flags.
         bases2fastq_flags (str): Custom Bases2fastq flags.
+        bclconvert_flags (str): Custom bclconvert flags.
 
     Returns:
         str: Command string for the Draugr pipeline.
@@ -65,15 +84,17 @@ def generate_draugr_command(
     if skip_raw_qc:
         draugr_command += " -xq"
     if bcl_flags:
-        draugr_command += ' --custom-bcl2fastq-flags "' + bcl_flags.replace('"', '\\"') + '"'
+        draugr_command += " --custom-bcl2fastq-flags " + _format_flag_value(bcl_flags)
     if bases2fastq_flags:
-        draugr_command += ' --custom-bases2fastq-flags "' + bases2fastq_flags.replace('"', '\\"') + '"'
+        draugr_command += " --custom-bases2fastq-flags " + _format_flag_value(bases2fastq_flags)
+    if bclconvert_flags:
+        draugr_command += " --custom-bclconvert-flags " + _format_flag_value(bclconvert_flags)
 
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
     set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
     lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Dev/uv"
+    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Tools/bclconvert Dev/uv"
     prefix = f"{set_environ} {lmod_setup} {module_load}"
 
     system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
