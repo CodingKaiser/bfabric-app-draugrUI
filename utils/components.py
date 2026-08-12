@@ -73,7 +73,7 @@ def _instrument_section(title, note, colour, children):
 illumina_specific_section = _instrument_section(
     "Illumina-Specific",
     "Applies to Illumina runs only; ignored for Element/Aviti.",
-    "#0b6ea8",
+    "#ed8b00",
     [
         dbc.Input(value="", placeholder='Custom bclconvert flags', id='bclconvert-input'),
         html.Br(),
@@ -110,7 +110,7 @@ illumina_specific_section = _instrument_section(
 element_specific_section = _instrument_section(
     "Element-Specific",
     "Applies to Element/Aviti runs only; ignored for Illumina.",
-    "#8a5a1f",
+    "#35306e",
     [
         dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
     ],
