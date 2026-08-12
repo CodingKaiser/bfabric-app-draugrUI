@@ -122,22 +122,29 @@ main_content = html.Div(
         dbc.Tooltip("Skip the demultiplexing step entirely.", target="tip-skip-demux"),
         # Tooltips (inputs — tooltip on the field itself)
         dbc.Tooltip(
-            "Custom bcl2fastq flags, arguments separated by '|'. "
-            'E.g. "--barcode-mismatches 2|--minimum-trimmed-read-length". Do not include the '
-            'quotation marks when specifying this option.',
-            target="bcl-input",
-        ),
-        dbc.Tooltip(
-            "Custom bases2fastq flags, arguments separated by ';'. "
+            "Element/Aviti only. Custom bases2fastq flags, arguments separated by ';'. "
             'E.g. "--i1-cycles 8;--r2-cycles 40". Do not include the '
             'quotation marks when specifying this option.',
             target="bases2fastq-input",
         ),
         dbc.Tooltip(
-            "Custom bclconvert flags, arguments separated by '|'. "
-            'E.g. "--barcode-mismatches 2|--no-lane-splitting true". Do not include the '
-            'quotation marks when specifying this option.',
+            "Illumina only. Custom bclconvert flags, arguments separated by ';'. "
+            'E.g. "--tiles s_1_2201+s_1_2202;--num-unknown-barcodes-reported 20". '
+            "Do not put --use-bases-mask or --barcode-mismatches here — bcl-convert has no such "
+            "options and Draugr will reject the run; use the two fields below instead.",
             target="bclconvert-input",
+        ),
+        dbc.Tooltip(
+            "Illumina only. Overrides the computed bases mask. Give exactly one token per read "
+            'position, in run order, e.g. "y36n*,I8n*,I8n*,y150n*" or "Y36N*;I8N*;I8N*;Y150N*". '
+            "If the token count doesn't match the run, Draugr logs a warning and silently falls "
+            "back to the computed mask — check the log.",
+            target="bases-mask-input",
+        ),
+        dbc.Tooltip(
+            "Illumina only. Overrides Draugr's Hamming-distance-derived barcode mismatch count. "
+            'Leave on "Auto" unless you need to force a specific value.',
+            target="tip-barcode-mismatches",
         ),
         # Tooltips on Submit button wrappers
         dbc.Tooltip(
@@ -673,9 +680,10 @@ def toggle_modal2(n1, n2, is_open):
         State("skip-demux", "on"),
         State("disable-wizard", "on"),
         State("skip-raw-qc", "on"),
-        State("bcl-input", "value"),
         State("bases2fastq-input", "value"),
         State("bclconvert-input", "value"),
+        State("bases-mask-input", "value"),
+        State("barcode-mismatches-input", "value"),
         State("token_data", "data"),
         State("run_data", "data"),
         State("draugr-dropdown-2", "value"),
@@ -691,9 +699,10 @@ def execute_draugr_command(
     skip_demux,
     disable_wizard,
     skip_raw_qc,
-    bcl_flags,
     bases2fastq_flags,
     bclconvert_flags,
+    bases_mask,
+    barcode_mismatches,
     token_data,
     run_data,
     orders2,
@@ -719,9 +728,10 @@ def execute_draugr_command(
             skip_demux=skip_demux,
             disable_wizard=disable_wizard,
             skip_raw_qc=skip_raw_qc,
-            bcl_flags=bcl_flags,
             bases2fastq_flags=bases2fastq_flags,
             bclconvert_flags=bclconvert_flags,
+            bases_mask=bases_mask,
+            barcode_mismatches=barcode_mismatches,
         )
 
         #print(draugr_command)
@@ -808,9 +818,10 @@ def toggle_submit_button_2(orders):
         Output("gstore", "on"),
         Output("skip-postprocessing", "on"),
         Output("skip-demux", "on"),
-        Output("bcl-input", "value"),
         Output("bases2fastq-input", "value"),
         Output("bclconvert-input", "value"),
+        Output("bases-mask-input", "value"),
+        Output("barcode-mismatches-input", "value"),
         Output("draugr-dropdown", "value"),
         Output("draugr-dropdown-2", "value"),
     ],
@@ -823,7 +834,7 @@ def reset_form_state(_token_data):
     Overrides browser form-state restoration, which can cause the visual state
     of BooleanSwitches to differ from Dash's internal state.
     """
-    return False, True, False, False, False, "", "", "", None, None
+    return False, True, False, False, False, "", "", "", "", None, None
 
 
 if __name__ == "__main__":

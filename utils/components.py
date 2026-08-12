@@ -43,6 +43,79 @@ _icon_style = {"cursor": "help", "color": "#888", "font-size": "0.8em", "margin-
 def _label(text, tip_id):
     return html.Span([text, html.Span(" ⓘ", id=tip_id, style=_icon_style)])
 
+def _instrument_section(title, note, colour, children):
+    """Box a group of instrument-specific inputs so it reads as its own unit."""
+    return html.Div(
+        [
+            html.P(
+                title,
+                style={"font-weight": "bold", "margin-bottom": "2px", "color": colour},
+            ),
+            html.P(
+                note,
+                style={"font-size": "0.7em", "color": "#666", "margin-bottom": "8px"},
+            ),
+        ] + children,
+        style={
+            "border": f"2px solid {colour}",
+            "border-radius": "6px",
+            "background-color": "rgba(0, 0, 0, 0.03)",
+            "padding": "10px",
+            "margin-top": "8px",
+        },
+    )
+
+
+# Bases mask and barcode mismatches are top-level draugr flags as of v2.8.0:
+# bcl-convert 4.5.4 has no --use-bases-mask and no --barcode-mismatches option,
+# they are sample sheet settings. Typing either into the custom bclconvert flags
+# field makes draugr exit 2, hence the dedicated inputs.
+illumina_specific_section = _instrument_section(
+    "Illumina-Specific",
+    "Applies to Illumina runs only; ignored for Element/Aviti.",
+    "#0b6ea8",
+    [
+        dbc.Input(value="", placeholder='Custom bclconvert flags', id='bclconvert-input'),
+        html.Br(),
+        dbc.Input(
+            value="",
+            placeholder="Bases mask (e.g. y36n*,I8n*,I8n*,y150n*)",
+            id="bases-mask-input",
+        ),
+        html.Br(),
+        html.Div(
+            [
+                _label("Barcode mismatches", "tip-barcode-mismatches"),
+                dcc.Dropdown(
+                    options=[
+                        {"label": "Auto (draugr computes)", "value": ""},
+                        {"label": "0", "value": "0"},
+                        {"label": "1", "value": "1"},
+                        {"label": "2", "value": "2"},
+                    ],
+                    value="",
+                    id="barcode-mismatches-input",
+                    clearable=False,
+                    style={"width": "12vw", "font-size": "0.8em"},
+                ),
+            ],
+            style=_switch_row_style,
+        ),
+    ],
+)
+
+# Element exposes real settings flags on bases2fastq, so masks and mismatch
+# thresholds go inside the custom flags string here — there is no --bases-mask
+# for Element and the Illumina fields above do not apply.
+element_specific_section = _instrument_section(
+    "Element-Specific",
+    "Applies to Element/Aviti runs only; ignored for Illumina.",
+    "#8a5a1f",
+    [
+        dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
+    ],
+)
+
 default_sidebar = [
     html.P("Select Orders to DMX", id="sidebar_text"),
     dcc.Dropdown([], id='draugr-dropdown', multi=True),
@@ -50,11 +123,8 @@ default_sidebar = [
     html.Div([_label("Disable Wizard", "tip-disable-wizard"),  daq.BooleanSwitch(id='disable-wizard', on=False)], style=_switch_row_style),
     html.Div([_label("Skip RawQC",    "tip-skip-raw-qc"),daq.BooleanSwitch(id='skip-raw-qc', on=True)], style=_switch_row_style),
     html.Br(),
-    dbc.Input(value="", placeholder='Custom Bcl2fastq flags', id='bcl-input'),
-    html.Br(),
-    dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
-    html.Br(),
-    dbc.Input(value="", placeholder='Custom bclconvert flags', id='bclconvert-input'),
+    illumina_specific_section,
+    element_specific_section,
     html.Br(),
     html.P("Advanced Options", style={"font-weight": "bold", "margin-bottom": "4px"}),
     html.Div([_label("Skip GStore Copy",    "tip-gstore"),             daq.BooleanSwitch(id='gstore', on=False)],            style=_switch_row_style),
@@ -131,21 +201,31 @@ documentation_content = [
         html.B("Skip RawQC --"),
         " If you would like to skip generation of the RawQC report, select this option.",
         html.Br(), html.Br(),
-        html.B("Custom Bcl2fastq flags --"),
-        """ Custom bcl2fastq flags to use for the standard samples wrapped in a
-        string, with arguments separated by '|' characters, E.g. "--barcode-
-        mismatches 2|--minimum-trimmed-read-length ". For a full list of possible flags, see the """,
-        html.A(" bcl2fastq documentation.", href="https://support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/bcl2fastq/bcl2fastq_letterbooklet_15038058brpmi.pdf", target="_blank"),
-        html.Br(), html.Br(),
-        html.B("Custom Bases2fastq flags --"),
-        """ Custom bases2fastq flags to use wrapped in a string, with arguments
-        separated by ';' characters, E.g. "--i1-cycles 8;--r2-cycles 40 ". For a full list of possible flags, see the """,
-        html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
-        html.Br(), html.Br(),
-        html.B("Custom bclconvert flags --"),
+        html.B("Custom bclconvert flags (Illumina-Specific) --"),
         """ Custom bclconvert flags to use for the standard samples, with arguments
-        separated by '|' characters, E.g. "--barcode-mismatches 2|--no-lane-splitting true". For a full list of possible flags, see the """,
-        html.A("bcl-convert documentation", href="https://support.illumina.com/sequencing/sequencing_software/bcl-convert.html", target="_blank"),
+        separated by ';' characters, E.g. "--tiles s_1_2201+s_1_2202;--num-unknown-barcodes-reported 20".
+        Use the Illumina-Specific fields below for the bases mask and barcode mismatches — bcl-convert has no
+        command-line option for either, and Draugr will reject them if given here. For a full list of possible flags, see the """,
+        html.A("bcl-convert documentation", href="https://help.dragen.illumina.com/dragen-v4.5/product-guides/dragen-v4.5/bcl-conversion", target="_blank"),
+        html.Br(), html.Br(),
+        html.B("Bases mask (Illumina-Specific) --"),
+        """ Overrides the automatically computed bases mask. Accepts the comma form
+        "y36n*,I8n*,I8n*,y150n*" or the semicolon form "Y36N*;I8N*;I8N*;Y150N*". You must give exactly one
+        token per read position in the run, in run order. If the token count doesn't match the run,
+        Draugr logs an "Ignoring --bases-mask" warning and silently falls back to the computed mask, so check
+        the log if your mask doesn't seem to have applied. Leave empty to use the computed mask.""",
+        html.Br(), html.Br(),
+        html.B("Barcode mismatches (Illumina-Specific) --"),
+        """ Overrides the number of permitted barcode mismatches, which Draugr otherwise derives from
+        barcode Hamming distances. Allowed values are 0, 1 and 2; leave on "Auto" to let Draugr decide.""",
+        html.Br(), html.Br(),
+        html.B("Custom Bases2fastq flags (Element-Specific) --"),
+        """ Custom bases2fastq flags to use wrapped in a string, with arguments
+        separated by ';' characters, E.g. "--i1-cycles 8;--r2-cycles 40 ". Unlike bcl-convert, bases2fastq
+        exposes real settings flags, so masks and mismatch thresholds belong here rather than in the
+        Illumina-Specific fields, E.g. "--settings R1FastqMask,R1:y36n*;--settings I1MismatchThreshold,0".
+        For a full list of possible flags, see the """,
+        html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
         html.Br(), html.Br(),
     ], style={"margin-left": "2vw"}),
         html.H4("Sushify Tab"),

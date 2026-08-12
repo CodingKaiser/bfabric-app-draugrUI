@@ -30,12 +30,19 @@ def _format_flag_value(value):
     examples), which previously ended up as literal quote characters inside the
     argument value. Strip one layer of surrounding quotes, then quote the result
     for the remote shell that receives the SSH payload.
+
+    The caller embeds the finished command inside a single-quoted ssh argument,
+    so the quotes shlex.quote() adds would otherwise close that outer quote and
+    let the local shell interpret the value. Values legitimately contain ';'
+    (the bases mask and custom flag separators), which would then be read as a
+    command separator, so the embedded single quotes are escaped for the extra
+    level of nesting.
     """
     stripped = value.strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
         stripped = stripped[1:-1].strip()
 
-    return shlex.quote(stripped)
+    return shlex.quote(stripped).replace("'", "'\\''")
 
 
 def generate_draugr_command(
@@ -47,9 +54,10 @@ def generate_draugr_command(
     skip_demux=False,
     disable_wizard=False,
     skip_raw_qc=False,
-    bcl_flags=None,
     bases2fastq_flags=None,
-    bclconvert_flags=None
+    bclconvert_flags=None,
+    bases_mask=None,
+    barcode_mismatches=None
 ):
     """
     Generate a command string for the Draugr pipeline.
@@ -63,9 +71,10 @@ def generate_draugr_command(
         skip_demux (bool): Skip demultiplexing step.
         disable_wizard (bool): Disable the wizard.
         skip_raw_qc (bool): Skip generation of RawQC report.
-        bcl_flags (str): Custom Bcl2fastq flags.
         bases2fastq_flags (str): Custom Bases2fastq flags.
         bclconvert_flags (str): Custom bclconvert flags.
+        bases_mask (str): Illumina-only bases mask override (--bases-mask).
+        barcode_mismatches (str): Illumina-only barcode mismatch override, "0"/"1"/"2".
 
     Returns:
         str: Command string for the Draugr pipeline.
@@ -83,12 +92,17 @@ def generate_draugr_command(
         draugr_command += " --disable-wizard"
     if skip_raw_qc:
         draugr_command += " -xq"
-    if bcl_flags:
-        draugr_command += " --custom-bcl2fastq-flags " + _format_flag_value(bcl_flags)
     if bases2fastq_flags:
         draugr_command += " --custom-bases2fastq-flags " + _format_flag_value(bases2fastq_flags)
     if bclconvert_flags:
         draugr_command += " --custom-bclconvert-flags " + _format_flag_value(bclconvert_flags)
+    # --bases-mask and --barcode-mismatches are separate top-level flags as of
+    # draugr v2.8.0. Use --flag=value: the mask can legitimately start with '-',
+    # and the space form would make argparse read it as the next flag.
+    if bases_mask:
+        draugr_command += " --bases-mask=" + _format_flag_value(bases_mask)
+    if barcode_mismatches:
+        draugr_command += " --barcode-mismatches=" + _format_flag_value(barcode_mismatches)
 
     draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
 
