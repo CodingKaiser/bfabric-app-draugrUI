@@ -1,0 +1,8 @@
+[app]
+name = "draugrui"
+description = "User Interface for Draugr invocations on FGCZ cluster"
+port = 8050
+has_worker = false
+python_version = "3.12"
+app_title = "DraugrUI"
+install_paths = ["index.py", "pyproject.toml", "utils"]

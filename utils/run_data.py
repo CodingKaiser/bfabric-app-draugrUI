@@ -5,10 +5,10 @@ Extracts lane/container/server information that the generic framework
 entity_data() does not provide.
 """
 
-from utils.bfabric_utils import get_logger, get_user_wrapper
+from utils.bfabric_utils import as_token_data, get_logger, get_user_wrapper
 
 
-def fetch_run_entity_data(token_data: dict) -> dict | None:
+def fetch_run_entity_data(token_data) -> dict | None:
     """
     Fetch run-specific entity data from B-Fabric: lanes, containers, server, datafolder.
 
@@ -16,7 +16,8 @@ def fetch_run_entity_data(token_data: dict) -> dict | None:
     traverses run → rununit → rununitlane → sample → container.
 
     Args:
-        token_data: Validated token data dict from process_url_and_token().
+        token_data: The session's token context, either the typed UrlTokenContext or
+            the dict it becomes in a dcc.Store.
 
     Returns:
         Dict with keys: name, createdby, created, modified, lanes, containers, server, datafolder.
@@ -31,9 +32,9 @@ def fetch_run_entity_data(token_data: dict) -> dict | None:
         "Plate": "plate",
     }
 
-    entity_class = token_data.get('entityClass_data')
-    endpoint = entity_class_map.get(entity_class)
-    entity_id = token_data.get('entity_id_data')
+    token_data = as_token_data(token_data)
+    endpoint = entity_class_map.get(token_data.entity_class_name)
+    entity_id = token_data.entity_id
 
     if not endpoint or not entity_id:
         return None

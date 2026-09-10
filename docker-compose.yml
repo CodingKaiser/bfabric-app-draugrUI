@@ -1,0 +1,17 @@
+services:
+  web:
+    build:
+      context: .
+    ports:
+      - "${DRAUGRUI_PORT:-8050}:8050"
+    env_file: .env
+    environment:
+      - BFABRIC_WEBAPP_ENV=/app/.env
+      - BFABRIC_WEBAPP_ENV_PREFIX=DRAUGRUI_
+    # Cross-platform: works on Linux, Mac, and Windows (Docker Desktop).
+    # host.docker.internal lets REDIS_HOST/SMTP_HOST=host.docker.internal reach
+    # services on the Docker host. On Linux, prefer the host-networking override
+    # (docker-compose.linux.yml) so plain `localhost` works with no host config.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
