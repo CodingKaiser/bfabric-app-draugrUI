@@ -1,50 +1,48 @@
 """
-Local overrides for Bfabric wrappers and logger.
+Session clients for the B-Fabric instance the app was launched from.
 
-- Power user wrapper: reads from ~/.bfabricpy.yml (for log writes)
-- User wrapper: built from token credentials (for data reads)
-- Logger: uses power user wrapper for flushing logs
+Authentication is the library's: exchanging the launch token establishes an OAuth
+session per instance, holding a client for the logged-in user and one for the app's
+service account. These helpers only rebuild the typed token context from the dict
+that survives the dcc.Store round trip, and hand back the matching client.
+
+Nothing here reads ~/.bfabricpy.yml any more, and there is no password in the
+token — both went away with the move to OAuth.
 """
 
-import os
-from bfabric import Bfabric, BfabricAuth, BfabricClientConfig
-from bfabric.config.config_data import ConfigData
+from bfabric import Bfabric
+from bfabric.oauth import UrlTokenContext
+from bfabric_web_apps import bfabric_interface
+from bfabric_web_apps import get_logger as library_get_logger
 from bfabric_web_apps.objects.Logger import Logger
 
-CONFIG_FILE_PATH = os.path.expanduser("~/.bfabricpy.yml")
 
-
-def get_power_user_wrapper() -> Bfabric:
-    """Return a Bfabric wrapper using credentials from ~/.bfabricpy.yml."""
-    return Bfabric.from_config(config_path=CONFIG_FILE_PATH)
-
-
-def get_user_wrapper(token_data: dict) -> Bfabric:
+def as_token_data(token_data) -> UrlTokenContext:
     """
-    Return a Bfabric wrapper using the logged-in user's credentials from the token.
+    Return the typed token context, rebuilding it from the dcc.Store dict if needed.
 
-    This matches the old token_response_to_bfabric() behavior: API calls
-    run with the user's own permissions, not the power user's.
+    Only the model's fields survive the round trip through the store, so derived
+    values such as `base_url` and `is_employee` are only available on the model.
     """
-    auth = BfabricAuth(
-        login=token_data.get("user_data"),
-        password=token_data.get("userWsPassword"),
-    )
-    client_config = BfabricClientConfig(base_url=token_data.get("webbase_data"))
-    config_data = ConfigData(client=client_config, auth=auth)
-    return Bfabric(config_data=config_data)
+    if isinstance(token_data, UrlTokenContext):
+        return token_data
+    return UrlTokenContext.model_validate(token_data)
 
 
-def get_logger(token_data: dict) -> Logger:
+def get_user_wrapper(token_data) -> Bfabric:
     """
-    Create a Logger whose power_user_wrapper reads from ~/.bfabricpy.yml
-    instead of the framework's .env-based credentials.
-    """
-    jobid = token_data.get("jobId")
-    username = token_data.get("user_data", "unknown")
-    base_url = token_data.get("webbase_data", "")
+    Return the session's Bfabric client for the logged-in user.
 
-    logger = Logger(jobid=jobid, username=username, base_url=base_url)
-    # Override the wrapper with one from ~/.bfabricpy.yml
-    logger.power_user_wrapper = get_power_user_wrapper()
-    return logger
+    The run and lane data this app reads runs with the user's own permissions,
+    not the service account's.
+
+    Raises:
+        RuntimeError: If the OAuth session has expired and the user has to re-open
+            the app from B-Fabric.
+    """
+    return bfabric_interface.get_wrapper(as_token_data(token_data))
+
+
+def get_logger(token_data) -> Logger:
+    """Return a Logger that writes audit entries under the service account."""
+    return library_get_logger(as_token_data(token_data))

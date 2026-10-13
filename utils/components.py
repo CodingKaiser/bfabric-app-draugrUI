@@ -3,45 +3,68 @@ Domain-specific UI components for DraugrUI.
 
 Only contains components unique to the Draugr workflow:
 lane cards, DMX/Sushi sidebars, confirmation modals, and documentation.
-Generic auth/layout components are now provided by bfabric_web_apps.
+The app shell — title bar, entity row, tab bar, notification stack — and the
+generic auth/layout components come from bfabric_web_apps, as do the .bf-*
+classes used below (the library's design system in
+bfabric_web_apps/assets/bfabric.css, served automatically by the shell).
+
+The switches are dbc.Switch, whose state prop is `value`. They were
+daq.BooleanSwitch (prop `on`) until dash_daq stopped arriving as a transitive
+dependency of the library, which itself moved off dash_daq for the same reason.
 """
 
 import dash_bootstrap_components as dbc
-from dash import html, dcc
-import dash_daq as daq
-
+from dash import dcc, html
 
 # ==================== Lane Cards ====================
 
+
 def lane_card(lane_position, container_ids, highlight=False):
-    card_content = [
-        dbc.CardHeader(f"Lane {lane_position}"),
-        dbc.CardBody(
-            [html.P("Container IDs:")] + [html.H5(name) for name in container_ids]
-            if container_ids
-            else html.P("[None Assigned]", style={"color": "gray"})
-        ),
-    ]
-    style = {"max-width": "25vw", "margin": "10px"}
+    """One lane of the run, listing the orders whose samples it holds."""
+    body = (
+        [html.P("Container IDs:", className="bf-muted")]
+        + [html.H5(name) for name in container_ids]
+        if container_ids
+        else [html.P("[None Assigned]", className="bf-muted")]
+    )
+
+    style = {"maxWidth": "25vw", "marginBottom": "10px"}
     if highlight:
-        style["border"] = "4px solid #007bff"
-        style["background-color"] = "rgba(0, 123, 255, 0.1)"
-    
-    return dbc.Card(card_content, style=style)
+        # Lanes holding a selected order are called out in the B-Fabric accent.
+        style["borderColor"] = "var(--bf-accent)"
+        style["borderWidth"] = "2px"
+
+    return html.Div(
+        className="bf-panel",
+        style=style,
+        children=[
+            html.Div(f"Lane {lane_position}", className="bf-panel-header"),
+            html.Div(body, className="bf-panel-body"),
+        ],
+    )
 
 
 # ==================== Sidebars ====================
 
 _switch_row_style = {
     "display": "flex",
-    "align-items": "center",
-    "justify-content": "space-between",
-    "margin-bottom": "8px",
+    "alignItems": "center",
+    "justifyContent": "space-between",
+    "marginBottom": "8px",
 }
-_icon_style = {"cursor": "help", "color": "#888", "font-size": "0.8em", "margin-left": "4px"}
+_icon_style = {"cursor": "help", "color": "#888", "fontSize": "0.8em", "marginLeft": "4px"}
+
 
 def _label(text, tip_id):
     return html.Span([text, html.Span(" ⓘ", id=tip_id, style=_icon_style)])
+
+
+def _switch_row(text, tip_id, switch_id, on=False):
+    return html.Div(
+        [_label(text, tip_id), dbc.Switch(id=switch_id, value=on, className="mb-0")],
+        style=_switch_row_style,
+    )
+
 
 def _instrument_section(title, note, colour, children):
     """Box a group of instrument-specific inputs so it reads as its own unit."""
@@ -49,19 +72,17 @@ def _instrument_section(title, note, colour, children):
         [
             html.P(
                 title,
-                style={"font-weight": "bold", "margin-bottom": "2px", "color": colour},
+                className="bf-bold",
+                style={"marginBottom": "2px", "color": colour},
             ),
-            html.P(
-                note,
-                style={"font-size": "0.7em", "color": "#666", "margin-bottom": "8px"},
-            ),
-        ] + children,
+            html.P(note, className="bf-muted", style={"marginBottom": "8px"}),
+        ]
+        + children,
         style={
             "border": f"2px solid {colour}",
-            "border-radius": "6px",
-            "background-color": "rgba(0, 0, 0, 0.03)",
+            "background": "rgba(0, 0, 0, 0.03)",
             "padding": "10px",
-            "margin-top": "8px",
+            "marginTop": "8px",
         },
     )
 
@@ -75,7 +96,7 @@ illumina_specific_section = _instrument_section(
     "Applies to Illumina runs only; ignored for Element/Aviti.",
     "#ed8b00",
     [
-        dbc.Input(value="", placeholder='Custom bclconvert flags', id='bclconvert-input'),
+        dbc.Input(value="", placeholder="Custom bclconvert flags", id="bclconvert-input"),
         html.Br(),
         dbc.Input(
             value="",
@@ -96,7 +117,7 @@ illumina_specific_section = _instrument_section(
                     value="",
                     id="barcode-mismatches-input",
                     clearable=False,
-                    style={"width": "12vw", "font-size": "0.8em"},
+                    style={"width": "12vw"},
                 ),
             ],
             style=_switch_row_style,
@@ -112,33 +133,41 @@ element_specific_section = _instrument_section(
     "Applies to Element/Aviti runs only; ignored for Illumina.",
     "#35306e",
     [
-        dbc.Input(value="", placeholder='Custom Bases2fastq flags', id='bases2fastq-input'),
+        dbc.Input(value="", placeholder="Custom Bases2fastq flags", id="bases2fastq-input"),
     ],
 )
 
+# The Submit button is wrapped in its own div because a tooltip cannot attach to
+# a disabled button — the wrapper is the tooltip's target instead.
 default_sidebar = [
     html.P("Select Orders to DMX", id="sidebar_text"),
-    dcc.Dropdown([], id='draugr-dropdown', multi=True),
+    dcc.Dropdown([], id="draugr-dropdown", multi=True),
     html.Br(),
-    html.Div([_label("Disable Wizard", "tip-disable-wizard"),  daq.BooleanSwitch(id='disable-wizard', on=False)], style=_switch_row_style),
-    html.Div([_label("Skip RawQC",    "tip-skip-raw-qc"),daq.BooleanSwitch(id='skip-raw-qc', on=True)], style=_switch_row_style),
+    _switch_row("Disable Wizard", "tip-disable-wizard", "disable-wizard", on=False),
+    _switch_row("Skip RawQC", "tip-skip-raw-qc", "skip-raw-qc", on=True),
     html.Br(),
     illumina_specific_section,
     element_specific_section,
     html.Br(),
-    html.P("Advanced Options", style={"font-weight": "bold", "margin-bottom": "4px"}),
-    html.Div([_label("Skip GStore Copy",    "tip-gstore"),             daq.BooleanSwitch(id='gstore', on=False)],            style=_switch_row_style),
-    html.Div([_label("Skip Postprocessing", "tip-skip-postprocessing"),daq.BooleanSwitch(id='skip-postprocessing', on=False)], style=_switch_row_style),
-    html.Div([_label("Skip Demultiplexing", "tip-skip-demux"),         daq.BooleanSwitch(id='skip-demux', on=False)],         style=_switch_row_style),
+    html.P("Advanced Options", className="bf-bold", style={"marginBottom": "4px"}),
+    _switch_row("Skip GStore Copy", "tip-gstore", "gstore", on=False),
+    _switch_row("Skip Postprocessing", "tip-skip-postprocessing", "skip-postprocessing", on=False),
+    _switch_row("Skip Demultiplexing", "tip-skip-demux", "skip-demux", on=False),
     html.Br(),
-    dbc.Button('Submit', id='draugr-button'),
+    html.Div(
+        id="submit-btn-wrapper",
+        children=dbc.Button("Submit", id="draugr-button", className="bf-btn"),
+    ),
 ]
 
 sushi_sidebar = [
-    html.P(id="sidebar_text2", children="Select Orders to Sushify"),
-    dcc.Dropdown([], id='draugr-dropdown-2', multi=True),
+    html.P("Select Orders to Sushify", id="sidebar_text2"),
+    dcc.Dropdown([], id="draugr-dropdown-2", multi=True),
     html.Br(),
-    html.Div(id="submit-btn-wrapper-2", children=dbc.Button('Submit', id='draugr-button-2')),
+    html.Div(
+        id="submit-btn-wrapper-2",
+        children=dbc.Button("Submit", id="draugr-button-2", className="bf-btn"),
+    ),
 ]
 
 
@@ -227,11 +256,11 @@ documentation_content = [
         For a full list of possible flags, see the """,
         html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
         html.Br(), html.Br(),
-    ], style={"margin-left": "2vw"}),
+    ], style={"marginLeft": "2vw"}),
         html.H4("Sushify Tab"),
     html.P([
         html.B("Select Orders to Sushify --"),
         " Select the order(s) for which you'd like to re-trigger sushification. After clicking \"submit\" and confirming your submission, DraugrUI will send a request to the sushi server to begin creating fastqc and fastqscreen reports. Order statuses will be updated at this stage as well. ",
         html.Br(), html.Br(),
-    ], style={"margin-left": "2vw"}),
+    ], style={"marginLeft": "2vw"}),
 ]

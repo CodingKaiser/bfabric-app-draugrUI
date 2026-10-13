@@ -1,0 +1,17 @@
+debian/
+deploy/
+deploy.toml
+tests/
+test/
+.git/
+.env
+.env.example
+*.deb
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+README.md
+LICENSE
+Dockerfile
+docker-compose.yml
