@@ -1,12 +1,12 @@
 """
-SSH command builders for the Draugr and Sushi pipelines.
+Command builders for the Draugr and Sushi pipelines.
 
-Neither function executes anything directly — both return shell command strings
-that the caller passes to os.system().
+Neither function executes anything directly.
 
-  generate_draugr_command()  — builds the full SSH + nohup call to start Draugr
-                                on the sequencing server (illumina@<server>),
-                                loading required modules and activating conda first.
+  build_draugr_args()        — builds draugr's own arguments for a run. They are
+                                handed to draugr's SLURM submit script (see
+                                utils/slurm_queue.py), which owns the ssh hop,
+                                the environment on the server and all quoting.
 
   generate_sushi_command()   — locates the run's dataset file on fgcz-h-082,
                                 then returns two commands: one to grep the selected
@@ -18,35 +18,25 @@ that the caller passes to os.system().
                                 generate_sushi_command() to find the dataset file.
 """
 
-import shlex
 import subprocess
 
 
 def _format_flag_value(value):
     """
-    Prepare a user-supplied custom flag string for the remote shell.
+    Strip one layer of quotes a user wrapped around a custom flag value.
 
     Users often wrap their input in quotes (the documentation shows quoted
-    examples), which previously ended up as literal quote characters inside the
-    argument value. Strip one layer of surrounding quotes, then quote the result
-    for the remote shell that receives the SSH payload.
-
-    The caller embeds the finished command inside a single-quoted ssh argument,
-    so the quotes shlex.quote() adds would otherwise close that outer quote and
-    let the local shell interpret the value. Values legitimately contain ';'
-    (the bases mask and custom flag separators), which would then be read as a
-    command separator, so the embedded single quotes are escaped for the extra
-    level of nesting.
+    examples), which would otherwise end up as literal quote characters inside
+    the argument value. No shell quoting happens here: the value travels as one
+    argv element, and draugr's job script quotes it for the server's shell.
     """
     stripped = value.strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
         stripped = stripped[1:-1].strip()
+    return stripped
 
-    return shlex.quote(stripped).replace("'", "'\\''")
 
-
-def generate_draugr_command(
-    server,
+def build_draugr_args(
     run_folder,
     order_list,
     skip_gstore=False,
@@ -60,10 +50,9 @@ def generate_draugr_command(
     barcode_mismatches=None
 ):
     """
-    Generate a command string for the Draugr pipeline.
+    Build draugr's arguments for reprocessing orders of a run.
 
     Args:
-        server (str): Server location
         run_folder (str): Run folder name.
         order_list (list): List of order IDs to process.
         skip_gstore (bool): Skip the Gstore copy step.
@@ -77,47 +66,41 @@ def generate_draugr_command(
         barcode_mismatches (str): Illumina-only barcode mismatch override, "0"/"1"/"2".
 
     Returns:
-        str: Command string for the Draugr pipeline.
+        list[str]: draugr's argv, one element per argument.
     """
-    uv_prefix = "uv run --directory /export/local/analyses/draugr_exec"
-    draugr_command = f"{uv_prefix} draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/{run_folder} --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets"
+    args = [
+        "--login-config", "/home/illumina/bfabric_cred/.bfabricpy.yml",
+        "--run-folder", f"/export/local/data/{run_folder}",
+        "--analysis-folder", "/export/local/analyses",
+        "--logger-rep", "/srv/GT/analysis/falkonoe/dmx_logs/prod",
+        "--scripts-destination", "/srv/GT/analysis/datasets",
+    ]
 
     if skip_gstore:
-        draugr_command += " --skip-gstore-copy"
+        args.append("--skip-gstore-copy")
     if skip_postprocessing:
-        draugr_command += " --skip-post-demux"
+        args.append("--skip-post-demux")
     if skip_demux:
-        draugr_command += " --skip-demux"
+        args.append("--skip-demux")
     if disable_wizard:
-        draugr_command += " --disable-wizard"
+        args.append("--disable-wizard")
     if skip_raw_qc:
-        draugr_command += " -xq"
+        args.append("-xq")
+    # --flag=value, because a custom flags string starts with '-' and argparse
+    # would otherwise read it as the next flag rather than as this flag's value.
     if bases2fastq_flags:
-        draugr_command += " --custom-bases2fastq-flags " + _format_flag_value(bases2fastq_flags)
+        args.append("--custom-bases2fastq-flags=" + _format_flag_value(bases2fastq_flags))
     if bclconvert_flags:
-        draugr_command += " --custom-bclconvert-flags " + _format_flag_value(bclconvert_flags)
+        args.append("--custom-bclconvert-flags=" + _format_flag_value(bclconvert_flags))
     # --bases-mask and --barcode-mismatches are separate top-level flags as of
-    # draugr v2.8.0. Use --flag=value: the mask can legitimately start with '-',
-    # and the space form would make argparse read it as the next flag.
+    # draugr v2.8.0. Same --flag=value form: the mask can legitimately start with '-'.
     if bases_mask:
-        draugr_command += " --bases-mask=" + _format_flag_value(bases_mask)
+        args.append("--bases-mask=" + _format_flag_value(bases_mask))
     if barcode_mismatches:
-        draugr_command += " --barcode-mismatches=" + _format_flag_value(barcode_mismatches)
+        args.append("--barcode-mismatches=" + _format_flag_value(barcode_mismatches))
 
-    draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
-
-    set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
-    lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Tools/bclconvert Dev/uv"
-    prefix = f"{set_environ} {lmod_setup} {module_load}"
-
-    system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
-
-    # change to just operation get executed
-    # params empty
-    # add the string we send to the server.   
-
-    return system_call
+    args += ["--reprocess-orders", ",".join(str(elt) for elt in order_list)]
+    return args
 
 def check_if_file_exists(ssh_command):
     try:
