@@ -6,24 +6,31 @@ Defines the Dash app, layout, and all callbacks. Entry point when run directly.
 The layout is the library's app shell (`get_static_layout`): dark app-name bar,
 notification banner stack, entity row, and a horizontal tab bar with Main,
 Documentation and Report a Bug. The app only supplies the Main tab's content —
-two sub-tabs, Draugr/DMX and Sushify, each pairing an options sidebar with the
-run's lane cards. The shell's tab bar has no slot for a second app tab, so the
-two workflows are sub-tabs of Main rather than tabs of the shell.
+three sub-tabs: Draugr/DMX and Sushify, each pairing an options sidebar with the
+run's lanes or orders, and Queue, the SLURM queue of draugr runs. The shell's tab
+bar has no slot for a further app tab, so the workflows are sub-tabs of Main
+rather than tabs of the shell.
 
 Authentication is the library's too: `register_url_token_callback` exchanges the
 launch token and fills the stores and header links, and `register_auth_callback`
 gates the content on an elevated user — reading the run's lanes and launching a
 demultiplexing both need B-Fabric web service access.
 
+draugr runs are queued in SLURM rather than started directly, one at a time per
+instrument server; see utils/slurm_queue.py.
+
 Callback responsibilities:
   - register_url_token_callback : exchange the launch token, populate stores (library)
   - register_auth_callback      : show/hide content based on auth state (library)
   - handle_bug_report           : submit a bug report (library)
   - load_run_data               : traverse the run's lanes/orders once per session
-  - update_dmx_dropdown / update_sushi_dropdown : populate order dropdowns
+  - update_dmx_dropdown         : populate the DMX order dropdown
   - update_lane_display         : render lane cards from run data
+  - update_sushi_status         : per-order sushification status, Sushify dropdown
   - toggle_modal / toggle_modal2 : open/close confirmation dialogs
-  - execute_draugr_command      : build and fire Draugr or Sushi SSH commands
+  - execute_draugr_command      : queue a Draugr run, or fire the Sushi SSH commands
+  - toggle_queue_refresh / refresh_queue : the Queue tab's live job list
+  - toggle_cancel_modal / cancel_job     : cancel a queued or running draugr job
   - toggle_submit_button / _2   : disable submit when no orders selected
   - reset_form_state            : reset switches/inputs on every page load
 """
@@ -44,24 +51,34 @@ from bfabric_web_apps import (
     register_url_token_callback,
     submit_bug_report,
 )
-from dash import Input, Output, State, dcc, html
+from dash import ALL, Input, Output, State, dcc, html, no_update
 from dash import callback_context as ctx
 
 from utils import draugr_utils as du
+from utils import slurm_queue, sushi_status
 from utils.bfabric_utils import as_token_data, get_logger
 from utils.components import (
+    cancel_modal,
     default_sidebar,
     documentation_content,
     lane_card,
     modal,
     modal2,
+    queue_pane,
+    queue_view,
     sushi_sidebar,
+    sushi_status_table,
 )
 from utils.run_data import fetch_run_entity_data
 
 # Load version from pyproject.toml
 with open("pyproject.toml", "rb") as f:
     app_version = tomllib.load(f).get("project", {}).get("version", "unknown")
+
+# How far back the Queue tab lists jobs that have ended.
+QUEUE_HISTORY_DAYS = 7
+# What can go wrong calling squeue/sbatch/scancel: a non-zero exit, or no SLURM client.
+SLURM_ERRORS = (slurm_queue.SlurmError, OSError)
 
 # ==================== (1) App ====================
 
@@ -74,7 +91,7 @@ server = app.server
 
 
 def _work_pane(sidebar, display_id):
-    """An options sidebar beside the run's lane cards — the shape both sub-tabs share."""
+    """An options sidebar beside the run's lanes or orders — the shape both work sub-tabs share."""
     return html.Div(
         className="bf-row bf-gap-16",
         style={"paddingTop": "12px"},
@@ -90,6 +107,10 @@ def _work_pane(sidebar, display_id):
 main_content = html.Div(
     [
         dcc.Store(id="run_data", storage_type="session"),
+        # Bumped after a submission or cancellation, so the queue and the
+        # sushification status refresh straight away instead of on their timers.
+        dcc.Store(id="queue-version", data=0),
+        dcc.Store(id="sushi-version", data=0),
         # Tooltips (switch labels — target the ⓘ icon IDs)
         dbc.Tooltip(
             "Disable the demultiplexing Wizard. None of the samples are tested for "
@@ -146,6 +167,7 @@ main_content = html.Div(
         # Confirmation modals
         modal,
         modal2,
+        cancel_modal,
         dbc.Tabs(
             [
                 dbc.Tab(
@@ -154,10 +176,11 @@ main_content = html.Div(
                     tab_id="dmx",
                 ),
                 dbc.Tab(
-                    _work_pane(sushi_sidebar, "sushi-lane-display"),
+                    _work_pane(sushi_sidebar, "sushi-status-display"),
                     label="Sushify",
                     tab_id="sushify",
                 ),
+                dbc.Tab(queue_pane, label="Queue", tab_id="queue"),
             ],
             id="work-tabs",
             active_tab="dmx",
@@ -232,6 +255,16 @@ def load_run_data(token_data):
         return None
 
 
+def _order_names(run_data):
+    """Order id -> name, from the lanes' "<id> <name>" entries."""
+    names = {}
+    for entries in run_data.get("lanes", {}).values():
+        for entry in entries:
+            order_id, _, name = str(entry).partition(" ")
+            names[order_id] = name
+    return names
+
+
 # --- Dropdown population from run data ---
 
 
@@ -246,36 +279,19 @@ def update_dmx_dropdown(run_data):
     return [{"label": elt, "value": elt} for elt in orders]
 
 
-@app.callback(
-    Output("draugr-dropdown-2", "options"),
-    [Input("run_data", "data")],
-)
-def update_sushi_dropdown(run_data):
-    if not run_data:
-        return []
-    orders = run_data.get("containers", [])
-    return [{"label": elt, "value": elt} for elt in orders]
-
-
 # --- Lane card display ---
 
 
 @app.callback(
-    [Output("lane-display", "children"), Output("sushi-lane-display", "children")],
-    [
-        Input("run_data", "data"),
-        Input("draugr-dropdown", "value"),
-        Input("draugr-dropdown-2", "value"),
-        Input("work-tabs", "active_tab"),
-    ],
+    Output("lane-display", "children"),
+    [Input("run_data", "data"), Input("draugr-dropdown", "value")],
 )
-def update_lane_display(run_data, selected_orders, selected_orders_2, active_tab):
+def update_lane_display(run_data, selected_orders):
     if not run_data or "lanes" not in run_data:
-        return [], []
+        return []
 
     lanes = run_data["lanes"]
-    selected = selected_orders if active_tab == "dmx" else selected_orders_2
-    selected_set = set(str(s) for s in (selected or []))
+    selected_set = set(str(s) for s in (selected_orders or []))
 
     def make_lane_card(pos, ids):
         # ids is a list of strings like "12345 OrderName"
@@ -283,33 +299,117 @@ def update_lane_display(run_data, selected_orders, selected_orders_2, active_tab
         return lane_card(lane_position=pos, container_ids=ids, highlight=highlight)
 
     if len(lanes) != 8:
-        container = html.Div(
+        return html.Div(
             [make_lane_card(pos, ids) for pos, ids in lanes.items()],
         )
-    else:
-        container = html.Div(
-            className="bf-row bf-gap-16",
-            children=[
-                html.Div([make_lane_card(i, lanes[str(i)]) for i in range(1, 5)]),
-                html.Div([make_lane_card(i, lanes[str(i)]) for i in range(5, 9)]),
-            ],
+    return html.Div(
+        className="bf-row bf-gap-16",
+        children=[
+            html.Div([make_lane_card(i, lanes[str(i)]) for i in range(1, 5)]),
+            html.Div([make_lane_card(i, lanes[str(i)]) for i in range(5, 9)]),
+        ],
+    )
+
+
+# --- Sushification status ---
+
+
+@app.callback(
+    [
+        Output("sushi-status-display", "children"),
+        Output("draugr-dropdown-2", "options"),
+        Output("draugr-dropdown-2", "value"),
+    ],
+    [
+        Input("run_data", "data"),
+        Input("sushi-version", "data"),
+        Input("work-tabs", "active_tab"),
+    ],
+    State("token_data", "data"),
+)
+def update_sushi_status(run_data, _version, active_tab, token_data):
+    """
+    Each order's sushification status, and the Sushify dropdown labelled with it.
+
+    Statuses change as draugr runs finish, so they are re-read whenever the tab
+    is opened. The outstanding (Ready) orders are only pre-selected on page load
+    and after a submission, so opening the tab keeps the user's own selection.
+    """
+    if not run_data or not token_data:
+        return [], [], None
+    switched_tab = ctx.triggered_id == "work-tabs"
+    if switched_tab and active_tab != "sushify":
+        return no_update, no_update, no_update
+
+    orders = run_data.get("containers", [])
+    try:
+        jobs = slurm_queue.list_jobs(days=0)
+    except SLURM_ERRORS:
+        # Without the queue only the Demultiplexing status is missing.
+        jobs = []
+    try:
+        rows = sushi_status.order_statuses(
+            token_data, run_data["name"], run_data["datafolder"], orders, jobs
+        )
+    except Exception as e:
+        # An expired OAuth session raises here; the orders can still be sushified.
+        return (
+            make_banner(f"Could not load the sushification status: {e}", "error"),
+            [{"label": o, "value": str(o)} for o in orders],
+            no_update,
         )
 
-    return container, container
+    names = _order_names(run_data)
+    base_url = str(as_token_data(token_data).base_url).rstrip("/")
+    options = [
+        {"label": f"{r['order']} {names.get(r['order'], '')} — {r['status']}", "value": r["order"]}
+        for r in rows
+    ]
+    ready = [r["order"] for r in rows if r["status"] == sushi_status.READY]
+    return (
+        sushi_status_table(rows, names, lambda i: f"{base_url}/dataset/show.html?id={i}"),
+        options,
+        no_update if switched_tab else ready,
+    )
 
 
 # --- Modal toggles ---
 
 
 @app.callback(
-    Output("modal", "is_open"),
+    [Output("modal", "is_open"), Output("modal-body", "children")],
     [Input("draugr-button", "n_clicks"), Input("close", "n_clicks")],
-    [State("modal", "is_open")],
+    [State("modal", "is_open"), State("run_data", "data")],
 )
-def toggle_modal(n1, n2, is_open):
-    if n1 or n2:
-        return not is_open
-    return is_open
+def toggle_modal(n1, n2, is_open, run_data):
+    if not (n1 or n2):
+        return is_open, no_update
+    if is_open:
+        return False, no_update
+
+    # Warn about anything already queued for this run, so it can be cancelled first.
+    # Not a block: the new job would only start after them anyway.
+    try:
+        active = slurm_queue.active_for_run(slurm_queue.list_jobs(days=0), run_data["datafolder"])
+    except SLURM_ERRORS:
+        # Submitting will report the SLURM problem itself.
+        active = []
+    if not active:
+        return True, "Are you sure you're ready to demux?"
+    return True, [
+        html.P("This run already has draugr jobs in the queue:"),
+        html.Ul([
+            html.Li(
+                f"Job {job['jobid']}, {job['state'].lower()}, orders "
+                f"{', '.join(job['orders']) or 'all'} (submitted by {job['submitter'] or 'unknown'})"
+            )
+            for job in active
+        ]),
+        html.P(
+            "A new submission will wait until they have finished. Cancel them on the Queue tab "
+            "first if they are no longer wanted."
+        ),
+    ]
 
 
 @app.callback(
@@ -327,7 +427,12 @@ def toggle_modal2(n1, n2, is_open):
 
 
 @app.callback(
-    Output("bf-notification", "children"),
+    [
+        Output("bf-notification", "children"),
+        Output("work-tabs", "active_tab"),
+        Output("queue-version", "data"),
+        Output("sushi-version", "data"),
+    ],
     [
         Input("close", "n_clicks"),
         Input("close2", "n_clicks"),
@@ -346,6 +451,8 @@ def toggle_modal2(n1, n2, is_open):
         State("token_data", "data"),
         State("run_data", "data"),
         State("draugr-dropdown-2", "value"),
+        State("queue-version", "data"),
+        State("sushi-version", "data"),
     ],
     prevent_initial_call=True,
 )
@@ -365,12 +472,15 @@ def execute_draugr_command(
     token_data,
     run_data,
     orders2,
+    queue_version,
+    sushi_version,
 ):
 
     if not token_data:
-        return []
+        return [], no_update, no_update, no_update
 
     L = get_logger(token_data)
+    submitter = as_token_data(token_data).subject
 
     button_clicked = ctx.triggered_id
 
@@ -382,10 +492,10 @@ def execute_draugr_command(
 
     if button_clicked == "close":
         if not orders:
-            return no_orders
+            return no_orders, no_update, no_update, no_update
 
-        draugr_command = du.generate_draugr_command(
-            server=run_data["server"],
+        server_name = run_data["server"]
+        draugr_args = du.build_draugr_args(
             run_folder=run_data["datafolder"],
             order_list=orders,
             skip_gstore=gstore,
@@ -399,24 +509,56 @@ def execute_draugr_command(
             barcode_mismatches=barcode_mismatches,
         )
 
-        os.system(draugr_command)
+        try:
+            jobid = slurm_queue.submit(
+                server=server_name,
+                run_folder=f"/export/local/data/{run_data['datafolder']}",
+                orders=orders,
+                draugr_args=draugr_args,
+                submitter=submitter,
+            )
+        except SLURM_ERRORS as e:
+            return (
+                make_banner(f"Demultiplexing could not be queued: {e}", "error"),
+                no_update,
+                no_update,
+                no_update,
+            )
 
         L.log_operation(
             operation="execute",
-            message="DMX execution",
-            params={"system_call": draugr_command},
+            message="DMX queued",
+            params={"job_id": jobid, "server": server_name, "draugr_args": draugr_args},
             flush_logs=True,
         )
 
-        return make_banner(
-            "Demultiplexing has begun! Please close this window now, and see B-Fabric "
-            "for further status updates and logs.",
-            "info",
+        try:
+            ahead = [
+                job
+                for job in slurm_queue.list_jobs(days=0)
+                if job["active"] and job["server"] == server_name and job["jobid"] != jobid
+            ]
+        except SLURM_ERRORS:
+            ahead = []
+        when = (
+            f"It will start once the {len(ahead)} job(s) ahead of it on that server have finished."
+            if ahead
+            else "Nothing else is queued on that server, so it starts right away."
+        )
+        return (
+            make_banner(
+                f"Demultiplexing queued as job {jobid} on {server_name}. {when} "
+                "Follow it on the Queue tab, and see B-Fabric for status updates and logs.",
+                "info",
+            ),
+            "queue",
+            (queue_version or 0) + 1,
+            no_update,
         )
 
     elif button_clicked == "close2":
         if not orders2:
-            return no_orders
+            return no_orders, no_update, no_update, no_update
 
         try:
             draugr_command1, draugr_command2 = du.generate_sushi_command(
@@ -432,9 +574,14 @@ def execute_draugr_command(
                 params=None,
                 flush_logs=True,
             )
-            return make_banner(
-                "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
-                "error",
+            return (
+                make_banner(
+                    "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
+                    "error",
+                ),
+                no_update,
+                no_update,
+                no_update,
             )
 
         os.system(draugr_command1)
@@ -451,13 +598,115 @@ def execute_draugr_command(
             flush_logs=True,
         )
 
-        return make_banner(
-            "Sushification has begun! Please close this window now, and see Sushi for "
-            "further status updates and logs.",
-            "info",
+        try:
+            sushi_status.record_submission(run_data["name"], orders2, submitter)
+        except OSError as e:
+            # Only the Submitted status depends on this; the sushification itself is underway.
+            print(f"Could not record the sushify submission: {e}")
+
+        return (
+            make_banner(
+                "Sushification has begun! Please close this window now, and see Sushi for "
+                "further status updates and logs.",
+                "info",
+            ),
+            no_update,
+            no_update,
+            (sushi_version or 0) + 1,
         )
 
-    return []
+    return [], no_update, no_update, no_update
+
+
+# --- Queue ---
+
+
+@app.callback(Output("queue-interval", "disabled"), Input("work-tabs", "active_tab"))
+def toggle_queue_refresh(active_tab):
+    """Only poll SLURM while the Queue tab is open."""
+    return active_tab != "queue"
+
+
+@app.callback(
+    Output("queue-display", "children"),
+    [
+        Input("queue-interval", "n_intervals"),
+        Input("work-tabs", "active_tab"),
+        Input("queue-version", "data"),
+    ],
+    State("run_data", "data"),
+)
+def refresh_queue(_n_intervals, active_tab, _version, run_data):
+    if active_tab != "queue":
+        return no_update
+    try:
+        jobs = slurm_queue.list_jobs(days=QUEUE_HISTORY_DAYS)
+    except SLURM_ERRORS as e:
+        return make_banner(f"Could not read the SLURM queue: {e}", "error")
+    return queue_view(jobs, (run_data or {}).get("datafolder"), QUEUE_HISTORY_DAYS)
+
+
+@app.callback(
+    [
+        Output("cancel-modal", "is_open"),
+        Output("cancel-modal-body", "children"),
+        Output("cancel-target", "data"),
+    ],
+    [
+        Input({"type": "cancel-job", "id": ALL, "state": ALL}, "n_clicks"),
+        Input("cancel-dismiss", "n_clicks"),
+        Input("cancel-confirm", "n_clicks"),
+    ],
+    prevent_initial_call=True,
+)
+def toggle_cancel_modal(_clicks, _dismiss, _confirm):
+    trigger = ctx.triggered_id
+    if trigger in ("cancel-dismiss", "cancel-confirm"):
+        return False, no_update, no_update
+    # Every refresh re-creates the Cancel buttons, which fires this without a click.
+    if not ctx.triggered or not ctx.triggered[0]["value"]:
+        return no_update, no_update, no_update
+
+    jobid = trigger["id"]
+    if trigger["state"] == "PENDING":
+        body = f"Job {jobid} is waiting in the queue and has not started. Cancelling removes it."
+    else:
+        body = (
+            f"Job {jobid} is running draugr now. Cancelling stops it on the server, bcl-convert "
+            "included. Whatever it has already written stays in place."
+        )
+    return True, body, {"jobid": jobid}
+
+
+@app.callback(
+    [
+        Output("bf-notification", "children", allow_duplicate=True),
+        Output("queue-version", "data", allow_duplicate=True),
+    ],
+    Input("cancel-confirm", "n_clicks"),
+    [
+        State("cancel-target", "data"),
+        State("token_data", "data"),
+        State("queue-version", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def cancel_job(n_clicks, target, token_data, queue_version):
+    if not n_clicks or not target or not token_data:
+        return no_update, no_update
+    jobid = target["jobid"]
+    try:
+        slurm_queue.cancel(jobid)
+    except SLURM_ERRORS as e:
+        return make_banner(f"Could not cancel job {jobid}: {e}", "error"), (queue_version or 0) + 1
+
+    get_logger(token_data).log_operation(
+        operation="execute",
+        message="DMX job cancelled",
+        params={"job_id": jobid},
+        flush_logs=True,
+    )
+    return make_banner(f"Cancelled draugr job {jobid}.", "info"), (queue_version or 0) + 1
 
 
 # --- Disable Submit buttons and Tooltips when no orders selected ---
@@ -498,7 +747,6 @@ def toggle_submit_button_2(orders):
         Output("bases-mask-input", "value"),
         Output("barcode-mismatches-input", "value"),
         Output("draugr-dropdown", "value"),
-        Output("draugr-dropdown-2", "value"),
     ],
     Input("token_data", "data"),
     prevent_initial_call=False,
@@ -507,9 +755,10 @@ def reset_form_state(_token_data):
     """Force switch/input props to defaults on every page load.
 
     Overrides browser form-state restoration, which can cause the visual state
-    of the switches to differ from Dash's internal state.
+    of the switches to differ from Dash's internal state. The Sushify dropdown
+    is not reset here: update_sushi_status pre-selects its outstanding orders.
     """
-    return False, True, False, False, False, "", "", "", "", None, None
+    return False, True, False, False, False, "", "", "", "", None
 
 
 if __name__ == "__main__":
