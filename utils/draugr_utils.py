@@ -108,7 +108,7 @@ def generate_draugr_command(
 
     set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
     lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Tools/bclconvert Dev/uv"
+    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Tools/bclconvert Dev/uv Tools/Quarto"
     prefix = f"{set_environ} {lmod_setup} {module_load}"
 
     system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
