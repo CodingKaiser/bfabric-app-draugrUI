@@ -44,7 +44,7 @@ from bfabric_web_apps import (
     register_url_token_callback,
     submit_bug_report,
 )
-from dash import Input, Output, State, dcc, html
+from dash import Input, Output, State, dcc, html, no_update
 from dash import callback_context as ctx
 
 from utils import draugr_utils as du
@@ -73,6 +73,17 @@ server = app.server
 # ==================== (2) Layout ====================
 
 
+def _lanes_loading():
+    """Shown in place of the lane cards until the run's lanes come back from B-Fabric."""
+    return html.Div(
+        [
+            dbc.Spinner(size="sm", spinner_style={"marginRight": "8px"}),
+            html.Span("Querying B-Fabric for the run's lanes…", className="bf-muted"),
+        ],
+        style={"display": "flex", "alignItems": "center", "padding": "12px 0"},
+    )
+
+
 def _work_pane(sidebar, display_id):
     """An options sidebar beside the run's lane cards — the shape both sub-tabs share."""
     return html.Div(
@@ -80,7 +91,10 @@ def _work_pane(sidebar, display_id):
         style={"paddingTop": "12px"},
         children=[
             html.Div(children=sidebar, style={"width": "320px", "flexShrink": 0}),
-            html.Div(id=display_id, className="bf-fill"),
+            # Starts on the spinner: Dash holds update_lane_display back until
+            # load_run_data has answered, so nothing else would fill the pane
+            # while B-Fabric is being queried.
+            html.Div(id=display_id, className="bf-fill", children=_lanes_loading()),
         ],
     )
 
@@ -223,13 +237,15 @@ def load_run_data(token_data):
     if not as_token_data(token_data).is_employee:
         return None
 
+    # A failed fetch stores {} rather than None: None is what update_lane_display
+    # reads as "still loading", and would leave the spinner up for good.
     try:
-        return fetch_run_entity_data(token_data)
-    except Exception as e:
+        return fetch_run_entity_data(token_data) or {}
+    except Exception as e:  # noqa: BLE001 — any B-Fabric/OAuth failure, see below
         # An expired OAuth session raises here. Leaving the dropdowns empty is
         # better than failing the callback and leaving the page half-rendered.
         print(f"Error fetching run data: {e}")
-        return None
+        return {}
 
 
 # --- Dropdown population from run data ---
@@ -270,12 +286,14 @@ def update_sushi_dropdown(run_data):
     ],
 )
 def update_lane_display(run_data, selected_orders, selected_orders_2, active_tab):
-    if not run_data or "lanes" not in run_data:
+    if run_data is None:
+        return _lanes_loading(), _lanes_loading()
+    if "lanes" not in run_data:
         return [], []
 
     lanes = run_data["lanes"]
     selected = selected_orders if active_tab == "dmx" else selected_orders_2
-    selected_set = set(str(s) for s in (selected or []))
+    selected_set = {str(s) for s in (selected or [])}
 
     def make_lane_card(pos, ids):
         # ids is a list of strings like "12345 OrderName"
@@ -326,6 +344,16 @@ def toggle_modal2(n1, n2, is_open):
 # --- Command execution ---
 
 
+def _banner(message, severity):
+    """A notification banner that stays up until the user dismisses it.
+
+    Uses make_banner's addressable form: its "×" is the dbc.Alert's own. The
+    one-off form's "×" drives the library's _dismiss_banner callback, which also
+    fires when the banner is inserted and so clears it the moment it appears.
+    """
+    return make_banner(message, severity, id="draugr-banner")
+
+
 @app.callback(
     Output("bf-notification", "children"),
     [
@@ -367,14 +395,20 @@ def execute_draugr_command(
     orders2,
 ):
 
+    button_clicked = ctx.triggered_id
+
+    # prevent_initial_call does not cover the Yes! buttons being inserted by the
+    # auth router, which fires this with n_clicks=0 on every page load. Only a
+    # real click may launch anything or post a banner.
+    if not {"close": n_clicks, "close2": n_clicks2}.get(button_clicked):
+        return no_update
+
     if not token_data:
         return []
 
     L = get_logger(token_data)
 
-    button_clicked = ctx.triggered_id
-
-    no_orders = make_banner(
+    no_orders = _banner(
         "Your submission didn't go through, because you haven't selected any orders "
         "from the dropdown! Please select which orders you'd like to process and try again.",
         "error",
@@ -408,7 +442,7 @@ def execute_draugr_command(
             flush_logs=True,
         )
 
-        return make_banner(
+        return _banner(
             "Demultiplexing has begun! Please close this window now, and see B-Fabric "
             "for further status updates and logs.",
             "info",
@@ -422,17 +456,18 @@ def execute_draugr_command(
             draugr_command1, draugr_command2 = du.generate_sushi_command(
                 order_list=orders2, run_name=run_data["name"]
             )
-        except Exception:
+        except (KeyError, OSError):
+            # No run name in run_data, or the ssh existence check could not run.
             draugr_command1, draugr_command2 = None, None
 
-        if not draugr_command1:
+        if not draugr_command1 or not draugr_command2:
             L.log_operation(
                 "EXECUTE",
                 "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
                 params=None,
                 flush_logs=True,
             )
-            return make_banner(
+            return _banner(
                 "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
                 "error",
             )
@@ -451,7 +486,7 @@ def execute_draugr_command(
             flush_logs=True,
         )
 
-        return make_banner(
+        return _banner(
             "Sushification has begun! Please close this window now, and see Sushi for "
             "further status updates and logs.",
             "info",
