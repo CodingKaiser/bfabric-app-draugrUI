@@ -1,6 +1,6 @@
 [project]
 name = "draugrui"
-version = "3.0.0"
+version = "3.1.0"
 description = "User Interface for Draugr invocations on FGCZ cluster"
 authors = [
     { name = "Falko Noe", email = "falko.noe@fgcz.uzh.ch" },
@@ -9,7 +9,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "bfabric-web-apps>=0.9.8,<0.10.0",
+    "bfabric-web-apps>=0.9.8,<0.11.2",
     "dash>=4.0.0,<5.0.0",
     "dash-bootstrap-components>=2.0.0,<3.0.0",
 ]
