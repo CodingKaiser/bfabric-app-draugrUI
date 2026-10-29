@@ -1,6 +1,6 @@
 [project]
 name = "draugrui"
-version = "3.1.0"
+version = "4.0.0"
 description = "User Interface for Draugr invocations on FGCZ cluster"
 authors = [
     { name = "Falko Noe", email = "falko.noe@fgcz.uzh.ch" },
@@ -13,3 +13,12 @@ dependencies = [
     "dash>=4.0.0,<5.0.0",
     "dash-bootstrap-components>=2.0.0,<3.0.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
