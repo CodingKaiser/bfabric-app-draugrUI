@@ -170,3 +170,9 @@ MIGRATION_DIARY.md
 
 # Pycharm
 .idea
+
+# Playwright Deps
+node_modules/
+package-lock.json
+package.json
+
