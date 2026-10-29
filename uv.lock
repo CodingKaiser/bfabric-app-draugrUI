@@ -651,7 +651,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bfabric-web-apps", specifier = ">=0.9.8,<0.10.0" },
+    { name = "bfabric-web-apps", specifier = ">=0.9.8,<0.11.2" },
     { name = "dash", specifier = ">=4.0.0,<5.0.0" },
     { name = "dash-bootstrap-components", specifier = ">=2.0.0,<3.0.0" },
 ]
