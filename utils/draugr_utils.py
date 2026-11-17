@@ -4,9 +4,9 @@ Command builders for the Draugr and Sushi pipelines.
 Neither function executes anything directly.
 
   build_draugr_args()        — builds draugr's own arguments for a run. They are
-                                handed to draugr's SLURM submit script (see
-                                utils/slurm_queue.py), which owns the ssh hop,
-                                the environment on the server and all quoting.
+                                queued with draugr-queue on the run's server (see
+                                utils/draugr_queue.py), which quotes them once
+                                for the ssh hop.
 
   generate_sushi_command()   — locates the run's dataset file on fgcz-h-082,
                                 then returns two commands: one to grep the selected
@@ -28,7 +28,7 @@ def _format_flag_value(value):
     Users often wrap their input in quotes (the documentation shows quoted
     examples), which would otherwise end up as literal quote characters inside
     the argument value. No shell quoting happens here: the value travels as one
-    argv element, and draugr's job script quotes it for the server's shell.
+    argv element, and utils/draugr_queue.py quotes it for the server's shell.
     """
     stripped = value.strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
@@ -37,7 +37,6 @@ def _format_flag_value(value):
 
 
 def build_draugr_args(
-    run_folder,
     order_list,
     skip_gstore=False,
     skip_postprocessing=False,
@@ -52,8 +51,10 @@ def build_draugr_args(
     """
     Build draugr's arguments for reprocessing orders of a run.
 
+    The run folder is not among them: draugr-queue takes it as its own
+    --run-folder and refuses it among draugr's arguments.
+
     Args:
-        run_folder (str): Run folder name.
         order_list (list): List of order IDs to process.
         skip_gstore (bool): Skip the Gstore copy step.
         skip_postprocessing (bool): Skip post-demultiplexing processing.
@@ -70,7 +71,6 @@ def build_draugr_args(
     """
     args = [
         "--login-config", "/home/illumina/bfabric_cred/.bfabricpy.yml",
-        "--run-folder", f"/export/local/data/{run_folder}",
         "--analysis-folder", "/export/local/analyses",
         "--logger-rep", "/srv/GT/analysis/falkonoe/dmx_logs/prod",
         "--scripts-destination", "/srv/GT/analysis/datasets",

@@ -8,15 +8,15 @@ def _value(args, flag):
 
 
 def test_defaults_only_reprocess_the_orders():
-    args = build_draugr_args(run_folder="261016_X570", order_list=[12345, 12399])
-    assert args[args.index("--run-folder") + 1] == "/export/local/data/261016_X570"
+    args = build_draugr_args(order_list=[12345, 12399])
+    # draugr-queue takes the run folder itself and refuses it among draugr's arguments.
+    assert not any(a.startswith("--run-folder") for a in args)
     assert args[-2:] == ["--reprocess-orders", "12345,12399"]
     assert not any(a.startswith("--skip") or a == "-xq" for a in args)
 
 
 def test_switches_map_to_draugr_flags():
     args = build_draugr_args(
-        run_folder="R",
         order_list=[1],
         skip_gstore=True,
         skip_postprocessing=True,
@@ -29,9 +29,8 @@ def test_switches_map_to_draugr_flags():
 
 
 def test_flag_values_are_one_argument_each_and_unquoted():
-    # Each value is one argv element; shell quoting is the job script's business now.
+    # Each value is one argv element; draugr_queue quotes for the ssh hop.
     args = build_draugr_args(
-        run_folder="R",
         order_list=[1],
         bclconvert_flags='"--tiles s_1_2201+s_1_2202;--num-unknown-barcodes-reported 20"',
         bases2fastq_flags="'--force-index-orientation'",
@@ -49,6 +48,6 @@ def test_flag_values_are_one_argument_each_and_unquoted():
 
 def test_empty_inputs_add_nothing():
     args = build_draugr_args(
-        run_folder="R", order_list=[1], bclconvert_flags="", bases_mask="", barcode_mismatches=""
+        order_list=[1], bclconvert_flags="", bases_mask="", barcode_mismatches=""
     )
     assert not any(a.startswith(("--custom", "--bases-mask", "--barcode-mismatches")) for a in args)

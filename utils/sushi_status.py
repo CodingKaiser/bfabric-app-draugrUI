@@ -11,8 +11,9 @@ An order moves through these states:
                      meantime registers a duplicate dataset
   Sushified          B-Fabric holds a dataset for the order and the run
 
-An order with a pending or running draugr job shows as being demultiplexed
-instead, whatever its state before.
+An order with a queued or running draugr job shows as being demultiplexed
+instead, whatever its state before. A job without --reprocess-orders (a full
+automatic run) counts for every order.
 
 Sushification is checked against B-Fabric, not by where the script sits:
 scripts are left in place after a successful run, and the script's trailing
@@ -20,17 +21,20 @@ scripts are left in place after a successful run, and the script's trailing
 """
 
 import json
+import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from utils import slurm_queue
+from utils import draugr_queue
 from utils.bfabric_utils import get_logger, get_user_wrapper
 
 DATASETS_DIR = Path("/srv/GT/analysis/datasets")
 # Where draugr writes the script (ISeq for QC runs), and where it moves itself.
 SCRIPT_DIRS = [DATASETS_DIR, DATASETS_DIR / "ISeq", DATASETS_DIR / "processed"]
 SUBMITTED_WINDOW = timedelta(hours=1)
+# Where the app notes its sushify submissions, for the Submitted status.
+STATE_DIR = Path(os.environ.get("DRAUGRUI_STATE_DIR", "/srv/GT/analysis/draugrUI"))
 
 NOT_DEMUXED = "Not demultiplexed"
 READY = "Ready"
@@ -74,7 +78,7 @@ def matching_dataset(datasets, order_id, run_name):
 
 def record_submission(run_name, orders, submitter, jobs_dir=None):
     """Note that orders were sushified from the app, for the Submitted status."""
-    folder = (jobs_dir or slurm_queue.JOBS_DIR) / "sushify"
+    folder = (jobs_dir or STATE_DIR) / "sushify"
     folder.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     record = {
@@ -89,7 +93,7 @@ def record_submission(run_name, orders, submitter, jobs_dir=None):
 def recent_submissions(run_name, now=None, jobs_dir=None):
     """Order id -> time it was last sushified from the app, within SUBMITTED_WINDOW."""
     now = now or datetime.now()
-    folder = (jobs_dir or slurm_queue.JOBS_DIR) / "sushify"
+    folder = (jobs_dir or STATE_DIR) / "sushify"
     submitted = {}
     for path in sorted(folder.glob(f"{run_name}_*.json")):
         try:
@@ -115,7 +119,7 @@ def derive_statuses(orders, run_name, demuxed, datasets_by_order, submissions, d
         demuxed: order ids with a block in the sushification script.
         datasets_by_order: order id -> B-Fabric datasets in that order's container.
         submissions: order id -> time it was last sushified from the app.
-        demuxing: order ids in a pending or running draugr job.
+        demuxing: order ids in a queued or running draugr job.
     """
     rows = []
     for order in (str(o) for o in orders):
@@ -159,20 +163,25 @@ def fetch_datasets(token_data, orders):
     return by_order
 
 
-def order_statuses(token_data, run_name, run_folder, orders, jobs):
+def demuxing_orders(queue_state, run_folder, orders):
+    """Order ids in a queued or running draugr job for the run; a full run covers them all."""
+    demuxing = set()
+    for job in draugr_queue.active_for_run(queue_state, run_folder):
+        demuxing.update(str(o) for o in (job["orders"] or orders))
+    return demuxing
+
+
+def order_statuses(token_data, run_name, run_folder, orders, queue_state):
     """
     Status rows for every order on the run, from the script, B-Fabric, the app and the queue.
 
     run_name is the B-Fabric run name (X570), which names the script and the
     datasets; run_folder is the run's data folder, which names its draugr jobs.
+    queue_state is the server's draugr_queue.status(), or None if it could not be read.
     """
     script = find_sushi_script(run_name)
     demuxed = demuxed_orders(script.read_text(), run_name) if script else set()
-    demuxing = {
-        str(order)
-        for job in slurm_queue.active_for_run(jobs, run_folder)
-        for order in job["orders"]
-    }
+    demuxing = demuxing_orders(queue_state, run_folder, orders) if queue_state else set()
     return derive_statuses(
         orders,
         run_name,

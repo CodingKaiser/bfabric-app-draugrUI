@@ -8,12 +8,12 @@ DraugrUI is launched from B-Fabric when a user selects a sequencing run. It:
 
 1. Reads the run's lane/container structure from B-Fabric
 2. Lets the operator select which orders to process and configure Draugr flags
-3. Queues the Draugr run as a SLURM job, one run at a time per instrument server
-4. Shows the queue of Draugr runs, with their parameters, and lets the operator cancel them
+3. Queues the Draugr run on the run's instrument server with `draugr-queue`, which runs one
+   draugr job at a time per server, optionally chained after other jobs (`--after`)
+4. Shows that server's queue, lost jobs and history, with parameters and logs, and lets the
+   operator remove queued jobs, stop the running one, and re-queue or clear lost ones
 5. Shows each order's sushification status and lets the operator trigger FastQC/FastQScreen
    reports (Sushi pipeline) once demultiplexing is done
-
----
 
 ## Project structure
 
@@ -25,7 +25,7 @@ bfabric-app-draugrUI/
 │   ├── components.py           # Domain-specific UI components (lane cards, sidebars, modals)
 │   ├── draugr_utils.py         # draugr argument builder; Sushi SSH command builder
 │   ├── run_data.py             # B-Fabric data fetcher: traverses Run → lane → container
-│   ├── slurm_queue.py          # Queue, list and cancel draugr runs in SLURM
+│   ├── draugr_queue.py         # draugr-queue over ssh: submit, status, remove, stop, log
 │   └── sushi_status.py         # Per-order sushification status
 ├── tests/                      # pytest unit tests (`uv run pytest`)
 ├── pyproject.toml              # Pinned dependencies (bfabric-web-apps, dash, dash-bootstrap-components)
@@ -34,26 +34,24 @@ bfabric-app-draugrUI/
 └── .env                        # Runtime config incl. OAuth client credentials (gitignored)
 ```
 
----
-
 ## Layout and framework wiring
 
 The page is the library's app shell (`get_static_layout`): a dark app-name bar, the
 notification banner stack, the entity row, and a horizontal tab bar. The app supplies only
-the **Main** tab's content and lets the library own everything else — there is no hand-rolled
-banner, header, tab bar or store declaration in this repo.
+the Main tab's content. The library owns everything else, so there is no hand-rolled banner,
+header, tab bar or store declaration in this repo.
 
-The shell's tab bar is a fixed set, with no slot for a further app tab, so DraugrUI's three
-views are **sub-tabs of Main**:
+The shell's tab bar is a fixed set with no slot for another app tab, so DraugrUI's three
+views are sub-tabs of Main:
 
 | Where | Tab | Purpose |
 |---|---|---|
-| Shell | **Main** | The sub-tabs below |
-| Shell | **Documentation** | In-app usage guide for all options and flags |
-| Shell | **Report a Bug** | Submit a bug report (stored as a log entry in B-Fabric) |
-| Main → sub-tab | **Draugr / DMX** | Configure options and queue a Draugr demultiplexing run |
-| Main → sub-tab | **Sushify** | Each order's sushification status; trigger FastQC and FastQScreen reports |
-| Main → sub-tab | **Queue** | Queued, running and recent Draugr jobs per server, with parameters and Cancel |
+| Shell | Main | The sub-tabs below |
+| Shell | Documentation | In-app usage guide for all options and flags |
+| Shell | Report a Bug | Submit a bug report (stored as a log entry in B-Fabric) |
+| Main → sub-tab | Draugr / DMX | Configure options and queue a Draugr demultiplexing run |
+| Main → sub-tab | Sushify | Each order's sushification status; trigger FastQC and FastQScreen reports |
+| Main → sub-tab | Queue | The run's server's queue, lost jobs and history, with parameters, logs, Remove and Stop |
 
 Draugr / DMX pairs its options sidebar with the run's lane cards; a lane holding a selected
 order is outlined in the B-Fabric accent colour. Sushify pairs its sidebar with a status
@@ -73,78 +71,106 @@ register_url_token_callback(app)         # ?jwt= → token exchange → stores +
 register_auth_callback(app, main_content=main_content, require_elevated=True)
 ```
 
-`require_elevated=True` because both reading the run's lanes and launching a demultiplexing
-need B-Fabric web-service access — a non-elevated user is shown the "not elevated" page
-instead of an app whose dropdowns would all be empty.
+`require_elevated=True` because reading the run's lanes and launching a demultiplexing both
+need B-Fabric web service access. A non-elevated user sees the "not elevated" page instead of
+an app whose dropdowns would all be empty.
 
 Styling uses the library's B-Fabric design system (`bf-panel`, `bf-btn`, `bf-row`/`bf-gap-*`,
 `bf-fill`, `bf-muted`, `bf-bold`), served automatically by the shell. The app ships no CSS of
-its own. Inline styles must use camelCase keys (`marginTop`, not `margin-top`) — the framework
+its own. Inline styles must use camelCase keys (`marginTop`, not `margin-top`): the framework
 is on Dash 4, where React silently ignores kebab-case style properties.
-
----
 
 ## File descriptions
 
 ### `index.py`
-The main application file. Contains:
-- **App initialisation** via `bfabric_web_apps.create_app()`, plus the module-level
-  `server = app.server` that gunicorn is pointed at
-- **Main-tab content** — the DMX/Sushify sub-tabs, tooltips and confirmation modals, handed to
-  `register_auth_callback` so it is only shown to an authenticated, elevated user
-- **Callbacks** — run-data loading, dropdown population, lane card display, modal toggles,
-  Draugr/Sushi command execution, submit-button enable/disable, form reset, and bug reports
+The main application file. It creates the app with `bfabric_web_apps.create_app()` and exposes
+`server = app.server` at module level for gunicorn. It builds the Main tab's content (the DMX,
+Sushify and Queue sub-tabs, tooltips and dialogs) and hands it to `register_auth_callback`, which
+shows it only to an authenticated, elevated user. Its callbacks load the run data, fill the
+dropdowns and lane cards, open and close the dialogs, queue Draugr runs and start the Sushi
+commands, run the Queue tab, enable the submit buttons, reset the form and submit bug reports.
 
 ### `utils/bfabric_utils.py`
 Hands back the session's B-Fabric clients, which come from the OAuth exchange of the launch
-token — no password and no `~/.bfabricpy.yml` are involved:
-- `as_token_data(token_data)` — rebuilds the typed `UrlTokenContext` from the dict that
+token, so no password or `~/.bfabricpy.yml` is involved:
+- `as_token_data(token_data)` rebuilds the typed `UrlTokenContext` from the dict that
   survives the `dcc.Store` round trip (derived values like `base_url` and `is_employee` only
   exist on the model)
-- `get_user_wrapper(token_data)` — the logged-in user's client, used for the run/lane reads
-- `get_logger(token_data)` — a Logger that writes audit entries under the service account
+- `get_user_wrapper(token_data)` is the logged-in user's client, used for the run and lane reads
+- `get_logger(token_data)` is a Logger that writes audit entries under the service account
 
 ### `utils/components.py`
 All domain-specific Dash/HTML components:
-- `lane_card()` — renders a single sequencing lane as a design-system panel
-- `default_sidebar` — DMX options: order dropdown, switches (Wizard, Skip flags), Illumina- and
-  Element-specific flag inputs, submit button
-- `sushi_sidebar` — order dropdown + submit button for the Sushify sub-tab
-- `modal`, `modal2` — confirmation dialogs shown before executing commands
-- `documentation_content` — the content rendered in the shell's Documentation tab
+- `lane_card()` renders one sequencing lane as a design-system panel
+- `default_sidebar` holds the DMX options: order dropdown, switches (Wizard, Skip flags),
+  Illumina- and Element-specific flag inputs, Run after dropdown and submit button
+- `sushi_sidebar` is the order dropdown and submit button of the Sushify sub-tab
+- `sushi_status_table()` is the per-order status table on the Sushify sub-tab
+- `queue_pane` and `queue_view()` make up the Queue sub-tab; `queue_action_modal` confirms
+  Remove, Stop, Clear and Queue again, and `log_modal` shows a job's log
+- `modal` and `modal2` are the confirmation dialogs shown before a submission
+- `documentation_content` is rendered in the shell's Documentation tab
 
-The switches are `dbc.Switch` (state prop `value`). They were `daq.BooleanSwitch` (prop `on`)
-until `dash_daq` stopped arriving as a transitive dependency of the library, which itself
-moved off `dash_daq`.
+The switches are `dbc.Switch` (state prop `value`). Don't use `dash_daq`: the library no
+longer pulls it in.
 
 ### `utils/draugr_utils.py`
-- `build_draugr_args()` — draugr's argument list for the flags selected in the UI, one argv
-  element per argument. No shell quoting: the submit script quotes for the server's shell.
-- `generate_sushi_command()` — checks where the run's dataset file lives on `fgcz-h-082`, then builds two SSH commands: one to `grep` the selected orders into a Sushi bash script and one to execute that script
+- `build_draugr_args()` returns draugr's arguments for the flags selected in the UI, one argv
+  element per argument. It leaves out `--run-folder`, which draugr-queue takes itself, and does
+  no shell quoting: `draugr_queue` quotes the whole remote command once for the ssh hop.
+- `generate_sushi_command()` checks where the run's dataset file lives on `fgcz-h-082`, then builds two SSH commands: one to `grep` the selected orders into a Sushi bash script and one to execute that script
 
-### `utils/slurm_queue.py`
-Queues draugr runs through draugr's own submit script (`bin/slurm/submit.py` in the draugr repo,
-run with `uv run --frozen --directory /usr/local/ngseq/opt/draugr`), shared with draugr's run
-monitor so automatic and manual runs wait in the same queue. Every job is named
-`draugr-<server>` and submitted with `--dependency=singleton`, so each instrument server runs
-one draugr job at a time. The script also writes each job's parameters to
-`$DRAUGR_JOBS_DIR/jobs/<jobid>.json` (default `/srv/GT/analysis/draugr_slurm`); this cluster's
-accounting keeps no job comments, so that file is the record of what a job was asked to do.
-- `submit()` — queues a run and returns the job id
-- `list_jobs()` — active jobs from `squeue` (which knows why a job waits), recent ones from
-  `sacct`, merged with the parameter files; adds each pending job's place in its server's queue
-- `cancel()` — `scancel`, only for active draugr jobs. On a running job, draugr's job script
-  stops draugr on the server too
+### `utils/draugr_queue.py`
+Every draugr run goes through a task spooler (`tsp`) queue with one slot on the instrument
+server that holds the data (fgcz-s-023, -024, -025, -034), so each server runs one draugr job
+at a time. Cron (which queues the full automatic run when a sequencing run finishes), the
+command line and this app all submit to it through draugr's `draugr-queue` command. That command
+must be deployed in `/export/local/analyses/draugr_exec` on each server; until it is, every call
+fails and the app shows the error. The app runs it as `illumina@<server>` over ssh and calls uv
+by its full path, because a non-interactive ssh session has no `module` command (bump `UV`
+together with the servers' `Dev/uv` module). The app keeps no record of its own jobs. The queue
+and its history (`/export/local/analyses/draugr_tsp/history.jsonl` on the server) are the record.
 
-Until the instrument servers are SLURM nodes, the job runs on a compute node and starts
-draugr over `ssh illumina@<server>` ("proxy" mode). Afterwards `DRAUGR_SLURM_MODE=native`
-in the submit script runs it on the server itself; nothing in this app changes.
+The remote command is built as a list and quoted once with `shlex.join`, and ssh runs without
+a local shell, so draugr arguments containing `;`, spaces, `*` or a leading `-` arrive intact.
+When `draugr-queue` refuses something it exits `1` with the reason on stderr, and the app
+shows that reason to the operator. ssh exits `255` when it cannot connect.
+- `submit()` queues a run (`--source ui --submitter <login>`, optionally `--after <tsp id>`)
+  and returns its tsp id
+- `status()` returns the server's `jobs`, `lost` and `history`, adds each job's orders and
+  queue position, and joins the history events of ended jobs on their `key`
+- `remove()` takes a queued job off the queue or clears a lost one
+- `stop()` kills the running job, draugr and bcl-convert included (`--by <login>`)
+- `log_tail()` returns the end of a job's console output (draugr's stdout/stderr)
+
+Jobs are identified by `key`, because tsp ids restart when the server reboots. The Queue tab,
+the Run after dropdown and the Demultiplexing status only poll the run's own server.
+
+A job submitted `--after` other jobs (tsp ids on the same server) runs draugr only if each of
+them succeeded. Otherwise it ends with exit code `99`, which in turn counts as a failure for
+any job chained after it.
+
+A finished job's exit code is `0` if it succeeded, `1` if draugr failed, `2` if draugr rejected
+its arguments, `99` if it was not run because a job it waited for failed, and `-1` if it was
+killed. A job with exit code `-1` and a `stopped` history event is shown as stopped, with who
+stopped it. A stopped job may leave partial output, and its run's B-Fabric status stays at
+demultiplexing. If the job ends before the stop reaches it, the app says so instead of showing
+an error.
+
+tsp keeps its queue in memory, so a reboot drops it. Jobs that were submitted, never finished
+or removed, and that tsp no longer knows are listed as lost. A job that *never started* is safe
+to queue again; an *interrupted* one was running and may have left partial output. Queue again
+submits the same arguments and clears the entry. It drops the job's `--after` links, since the
+tsp ids they refer to have restarted.
+
+`draugr-queue` accepts the same run as often as it is submitted, so the confirm button is
+disabled while a submission is in flight.
 
 ### `utils/sushi_status.py`
 Each order's status: *Not demultiplexed* (no block in `<RUN>_sushification.sh`), *Ready*,
-*Submitted* (sushified from the app within the last hour, not yet registered — sushifying again
+*Submitted* (sushified from the app within the last hour and not yet registered; sushifying again
 would register a duplicate), *Sushified* (a dataset for the order and run exists in B-Fabric), or
-*Demultiplexing* (a draugr job for it is queued or running). Sushification is checked in
+*Demultiplexing* (a draugr job for it, or a full run, is queued or running). Sushification is checked in
 B-Fabric, not by where the script sits, because the script moves itself to `processed/` even
 after a failed block.
 
@@ -156,8 +182,6 @@ Run → RunUnit → RunUnitLane → Sample → Container
 ```
 
 Returns the lane-to-container mapping, server location, and data folder name needed to populate the UI and build the Draugr SSH command.
-
----
 
 ## Setup
 
@@ -179,7 +203,7 @@ uv sync
 ### 2. Configure
 
 `.env` holds the runtime config, including live OAuth client secrets, and is gitignored.
-Generate it with the interactive walkthrough — never hand-write it, and never let an agent
+Generate it with the interactive walkthrough. Never write it by hand, and never let an agent
 write it:
 
 ```shell
@@ -203,8 +227,8 @@ Use the CLI, not `python index.py`: only the CLI exports `BFABRIC_WEBAPP_ENV_PRE
 re-execing itself from `deploy.toml`), so running the module directly reads **none** of the
 prefixed `.env` values and silently falls back to defaults.
 
-For local work without a real launch token, set `BFABRIC_MOCK_AUTH` for that run only — it
-logs in a fake employee user so the authenticated layout and callbacks actually render:
+For local work without a real launch token, set `BFABRIC_MOCK_AUTH` for that run only. It
+logs in a fake employee user, so the authenticated layout and callbacks render:
 
 ```shell
 DRAUGRUI_BFABRIC_MOCK_AUTH=true uv run bfabric-webapp run index:server --dev
@@ -214,26 +238,23 @@ A real `?jwt=` always wins over it. Never enable it in a deployed `.env`.
 
 ### 4. Trigger the app
 
-Navigate to the B-Fabric test (or production) server, open a sequencing **Run** entity, and
+Navigate to the B-Fabric test (or production) server, open a sequencing Run entity, and
 click the DraugrUI app link. B-Fabric opens the app with `?jwt=<launch token>`; the library
 exchanges that token for the session's OAuth clients and loads the run data automatically.
-
----
 
 ## Deployment
 
 `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example` and `.gitlab-ci.yml` are
-generated from `deploy.toml` — regenerate them with `uv run bfabric-webapp init` after
-changing it, and don't hand-edit them.
+generated from `deploy.toml`. Regenerate them with `uv run bfabric-webapp init` after
+changing it, and don't edit them by hand.
 
 The image installs `bfabric-web-apps` from PyPI at the version pinned in the Dockerfile, and
 `pip` ignores `[tool.uv.sources]`. So the app must never depend on an unreleased library
 commit: it would work locally under `uv` and fail inside the container. `pyproject.toml`
-therefore pins the released `bfabric-web-apps>=0.9.8,<0.10.0` from PyPI, with no git source.
+therefore pins the released `bfabric-web-apps>=0.9.8,<0.11.2` from PyPI, with no git source.
 
-> **Note:** the app queues draugr runs with the local SLURM client and reaches
-> `trxcopy@fgcz-h-082` over `ssh`. Run it directly on a cluster host, as the same account as
-> draugr's run monitor (`--dependency=singleton` only orders jobs of one SLURM user), with
-> `uv` on `PATH`, `/srv/GT` and `/usr/local/ngseq` mounted, and SSH keys for
-> `illumina@<instrument server>` (used by the queued jobs) and `trxcopy@fgcz-h-082`.
-> The Docker image has none of this and cannot queue runs as it stands.
+The app queues draugr runs over `ssh illumina@<instrument server>` and starts Sushi over
+`ssh trxcopy@fgcz-h-082`. Run it on a host with SSH keys for both and with `/srv/GT` mounted:
+the Sushify tab reads the sushification scripts there and records its submissions in
+`$DRAUGRUI_STATE_DIR/sushify` (default `/srv/GT/analysis/draugrUI`). The Docker image has none
+of this, so it cannot queue runs as it stands.

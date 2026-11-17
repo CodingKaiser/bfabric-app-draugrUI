@@ -79,3 +79,20 @@ def test_recent_submissions_expire_and_ignore_other_runs(tmp_path):
 def test_record_then_read_submission(tmp_path):
     ss.record_submission("X570", [12345], "falkonoe", jobs_dir=tmp_path)
     assert set(ss.recent_submissions("X570", jobs_dir=tmp_path)) == {"12345"}
+
+
+def test_demuxing_orders_counts_a_full_run_for_every_order():
+    from utils import draugr_queue
+
+    state = draugr_queue.annotate({
+        "server": "fgcz-s-023",
+        "jobs": [
+            {"tsp_id": 1, "state": "queued", "key": "a", "run": "R", "draugr_args": ["--reprocess-orders", "1"]},
+            {"tsp_id": 2, "state": "finished", "key": "b", "run": "R", "draugr_args": []},
+        ],
+        "lost": [],
+    })  # fmt: skip
+    assert ss.demuxing_orders(state, "R", [1, 2, 3]) == {"1"}
+    state["jobs"][0]["orders"] = None  # a full run, e.g. the automatic one
+    assert ss.demuxing_orders(state, "R", [1, 2, 3]) == {"1", "2", "3"}
+    assert ss.demuxing_orders(state, "other", [1, 2, 3]) == set()

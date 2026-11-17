@@ -7,7 +7,7 @@ The layout is the library's app shell (`get_static_layout`): dark app-name bar,
 notification banner stack, entity row, and a horizontal tab bar with Main,
 Documentation and Report a Bug. The app only supplies the Main tab's content —
 three sub-tabs: Draugr/DMX and Sushify, each pairing an options sidebar with the
-run's lanes or orders, and Queue, the SLURM queue of draugr runs. The shell's tab
+run's lanes or orders, and Queue, the draugr queue of the run's server. The shell's tab
 bar has no slot for a further app tab, so the workflows are sub-tabs of Main
 rather than tabs of the shell.
 
@@ -16,8 +16,8 @@ launch token and fills the stores and header links, and `register_auth_callback`
 gates the content on an elevated user — reading the run's lanes and launching a
 demultiplexing both need B-Fabric web service access.
 
-draugr runs are queued in SLURM rather than started directly, one at a time per
-instrument server; see utils/slurm_queue.py.
+draugr runs are queued with draugr-queue on the run's instrument server rather
+than started directly, one at a time per server; see utils/draugr_queue.py.
 
 Callback responsibilities:
   - register_url_token_callback : exchange the launch token, populate stores (library)
@@ -27,10 +27,12 @@ Callback responsibilities:
   - update_dmx_dropdown         : populate the DMX order dropdown
   - update_lane_display         : render lane cards from run data
   - update_sushi_status         : per-order sushification status, Sushify dropdown
+  - update_after_dropdown       : the server's queued/running jobs, for Run after
   - toggle_modal / toggle_modal2 : open/close confirmation dialogs
   - execute_draugr_command      : queue a Draugr run, or fire the Sushi SSH commands
   - toggle_queue_refresh / refresh_queue : the Queue tab's live job list
-  - toggle_cancel_modal / cancel_job     : cancel a queued or running draugr job
+  - toggle_queue_action_modal / run_queue_action : remove a queued job; clear or re-queue a lost one
+  - show_log                    : tail of a job's console output
   - toggle_submit_button / _2   : disable submit when no orders selected
   - reset_form_state            : reset switches/inputs on every page load
 """
@@ -54,16 +56,17 @@ from bfabric_web_apps import (
 from dash import ALL, Input, Output, State, dcc, html, no_update
 from dash import callback_context as ctx
 
+from utils import draugr_queue, sushi_status
 from utils import draugr_utils as du
-from utils import slurm_queue, sushi_status
 from utils.bfabric_utils import as_token_data, get_logger
 from utils.components import (
-    cancel_modal,
     default_sidebar,
     documentation_content,
     lane_card,
+    log_modal,
     modal,
     modal2,
+    queue_action_modal,
     queue_pane,
     queue_view,
     sushi_sidebar,
@@ -75,10 +78,8 @@ from utils.run_data import fetch_run_entity_data
 with open("pyproject.toml", "rb") as f:
     app_version = tomllib.load(f).get("project", {}).get("version", "unknown")
 
-# How far back the Queue tab lists jobs that have ended.
-QUEUE_HISTORY_DAYS = 7
-# What can go wrong calling squeue/sbatch/scancel: a non-zero exit, or no SLURM client.
-SLURM_ERRORS = (slurm_queue.SlurmError, OSError)
+# How many history events the Queue tab reads to list the jobs that have ended.
+QUEUE_HISTORY_EVENTS = 50
 
 # ==================== (1) App ====================
 
@@ -121,7 +122,7 @@ def _work_pane(sidebar, display_id, loading_text):
 main_content = html.Div(
     [
         dcc.Store(id="run_data", storage_type="session"),
-        # Bumped after a submission or cancellation, so the queue and the
+        # Bumped after a submission or a queue action, so the queue and the
         # sushification status refresh straight away instead of on their timers.
         dcc.Store(id="queue-version", data=0),
         dcc.Store(id="sushi-version", data=0),
@@ -141,6 +142,11 @@ main_content = html.Div(
             target="tip-skip-postprocessing",
         ),
         dbc.Tooltip("Skip the demultiplexing step entirely.", target="tip-skip-demux"),
+        dbc.Tooltip(
+            "Optional. Jobs on this run's server that must succeed first: the new job runs "
+            "draugr only if each of them succeeded.",
+            target="tip-after",
+        ),
         # Tooltips (inputs — tooltip on the field itself)
         dbc.Tooltip(
             "Element/Aviti only. Custom bases2fastq flags, arguments separated by ';'. "
@@ -181,7 +187,8 @@ main_content = html.Div(
         # Confirmation modals
         modal,
         modal2,
-        cancel_modal,
+        queue_action_modal,
+        log_modal,
         dbc.Tabs(
             [
                 dbc.Tab(
@@ -365,13 +372,13 @@ def update_sushi_status(run_data, _version, active_tab, token_data):
 
     orders = run_data.get("containers", [])
     try:
-        jobs = slurm_queue.list_jobs(days=0)
-    except SLURM_ERRORS:
+        queue_state = draugr_queue.status(run_data["server"], history=0)
+    except draugr_queue.QueueError:
         # Without the queue only the Demultiplexing status is missing.
-        jobs = []
+        queue_state = None
     try:
         rows = sushi_status.order_statuses(
-            token_data, run_data["name"], run_data["datafolder"], orders, jobs
+            token_data, run_data["name"], run_data["datafolder"], orders, queue_state
         )
     except Exception as e:
         # An expired OAuth session raises here; the orders can still be sushified.
@@ -409,12 +416,13 @@ def toggle_modal(n1, n2, is_open, run_data):
     if is_open:
         return False, no_update
 
-    # Warn about anything already queued for this run, so it can be cancelled first.
+    # Warn about anything already queued for this run, so it can be removed first.
     # Not a block: the new job would only start after them anyway.
     try:
-        active = slurm_queue.active_for_run(slurm_queue.list_jobs(days=0), run_data["datafolder"])
-    except SLURM_ERRORS:
-        # Submitting will report the SLURM problem itself.
+        state = draugr_queue.status(run_data["server"], history=0)
+        active = draugr_queue.active_for_run(state, run_data["datafolder"])
+    except draugr_queue.QueueError:
+        # Submitting will report the problem itself.
         active = []
     if not active:
         return True, "Are you sure you're ready to demux?"
@@ -422,14 +430,14 @@ def toggle_modal(n1, n2, is_open, run_data):
         html.P("This run already has draugr jobs in the queue:"),
         html.Ul([
             html.Li(
-                f"Job {job['jobid']}, {job['state'].lower()}, orders "
-                f"{', '.join(job['orders']) or 'all'} (submitted by {job['submitter'] or 'unknown'})"
+                f"Job {job['tsp_id']}, {job['state']}, orders "
+                f"{', '.join(job['orders'] or ['all'])} (submitted by {job.get('submitter') or 'unknown'})"
             )
             for job in active
         ]),
         html.P(
-            "A new submission will wait until they have finished. Cancel them on the Queue tab "
-            "first if they are no longer wanted."
+            "A new submission will wait until they have finished. Remove queued ones on the "
+            "Queue tab first if they are no longer wanted."
         ),
     ]
 
@@ -464,6 +472,7 @@ def _banner(message, severity):
         Output("work-tabs", "active_tab"),
         Output("queue-version", "data"),
         Output("sushi-version", "data"),
+        Output("after-dropdown", "value"),
     ],
     [
         Input("close", "n_clicks"),
@@ -471,6 +480,7 @@ def _banner(message, severity):
     ],
     [
         State("draugr-dropdown", "value"),
+        State("after-dropdown", "value"),
         State("gstore", "value"),
         State("skip-postprocessing", "value"),
         State("skip-demux", "value"),
@@ -487,11 +497,15 @@ def _banner(message, severity):
         State("sushi-version", "data"),
     ],
     prevent_initial_call=True,
+    # draugr-queue queues the same run as often as it is asked to, so a double
+    # click on Yes! must not get through as a second submission.
+    running=[(Output("close", "disabled"), True, False)],
 )
 def execute_draugr_command(
     n_clicks,
     n_clicks2,
     orders,
+    after,
     gstore,
     skip_postprocessing,
     skip_demux,
@@ -517,7 +531,7 @@ def execute_draugr_command(
         return no_update
 
     if not token_data:
-        return [], no_update, no_update, no_update
+        return [], no_update, no_update, no_update, no_update
 
     L = get_logger(token_data)
     submitter = as_token_data(token_data).subject
@@ -530,11 +544,10 @@ def execute_draugr_command(
 
     if button_clicked == "close":
         if not orders:
-            return no_orders, no_update, no_update, no_update
+            return no_orders, no_update, no_update, no_update, no_update
 
         server_name = run_data["server"]
         draugr_args = du.build_draugr_args(
-            run_folder=run_data["datafolder"],
             order_list=orders,
             skip_gstore=gstore,
             skip_postprocessing=skip_postprocessing,
@@ -548,55 +561,66 @@ def execute_draugr_command(
         )
 
         try:
-            jobid = slurm_queue.submit(
+            tsp_id = draugr_queue.submit(
                 server=server_name,
-                run_folder=f"/export/local/data/{run_data['datafolder']}",
-                orders=orders,
+                run_folder=f"{draugr_queue.DATA_DIR}/{run_data['datafolder']}",
                 draugr_args=draugr_args,
                 submitter=submitter,
+                after=after or [],
             )
-        except SLURM_ERRORS as e:
+        except draugr_queue.QueueError as e:
             return (
                 make_banner(f"Demultiplexing could not be queued: {e}", "error"),
                 no_update,
                 no_update,
                 no_update,
+                no_update,
             )
+
+        # The key identifies the job for good; the tsp id restarts with the server.
+        key, ahead = None, None
+        try:
+            active = draugr_queue.active_jobs(draugr_queue.status(server_name, history=0))
+            ours = [job for job in active if job["tsp_id"] == tsp_id]
+            key = ours[0]["key"] if ours else None
+            ahead = len([job for job in active if job["tsp_id"] < tsp_id])
+        except draugr_queue.QueueError:
+            pass
 
         L.log_operation(
             operation="execute",
             message="DMX queued",
-            params={"job_id": jobid, "server": server_name, "draugr_args": draugr_args},
+            params={
+                "tsp_id": tsp_id,
+                "key": key,
+                "server": server_name,
+                "after": after or [],
+                "draugr_args": draugr_args,
+            },
             flush_logs=True,
         )
 
-        try:
-            ahead = [
-                job
-                for job in slurm_queue.list_jobs(days=0)
-                if job["active"] and job["server"] == server_name and job["jobid"] != jobid
-            ]
-        except SLURM_ERRORS:
-            ahead = []
-        when = (
-            f"It will start once the {len(ahead)} job(s) ahead of it on that server have finished."
-            if ahead
-            else "Nothing else is queued on that server, so it starts right away."
-        )
+        if ahead is None:
+            when = "See the Queue tab for its place in the queue."
+        elif ahead:
+            when = f"There are {ahead} job(s) ahead of it on that server."
+        else:
+            when = "Nothing is ahead of it on that server, so it starts right away."
         return (
             _banner(
-                f"Demultiplexing queued as job {jobid} on {server_name}. {when} "
+                f"Demultiplexing queued as job {tsp_id} on {server_name}. {when} "
                 "Follow it on the Queue tab, and see B-Fabric for status updates and logs.",
                 "info",
             ),
             "queue",
             (queue_version or 0) + 1,
             no_update,
+            None,
         )
 
     elif button_clicked == "close2":
         if not orders2:
-            return no_orders, no_update, no_update, no_update
+            return no_orders, no_update, no_update, no_update, no_update
 
         try:
             draugr_command1, draugr_command2 = du.generate_sushi_command(
@@ -618,6 +642,7 @@ def execute_draugr_command(
                     "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
                     "error",
                 ),
+                no_update,
                 no_update,
                 no_update,
                 no_update,
@@ -652,17 +677,47 @@ def execute_draugr_command(
             no_update,
             no_update,
             (sushi_version or 0) + 1,
+            no_update,
         )
 
-    return [], no_update, no_update, no_update
+    return [], no_update, no_update, no_update, no_update
 
 
 # --- Queue ---
 
 
+def _job_label(job):
+    orders = ", ".join(job["orders"] or ["all"])
+    return f"job {job['tsp_id']} ({job['run']}, orders {orders})"
+
+
+@app.callback(
+    Output("after-dropdown", "options"),
+    [
+        Input("run_data", "data"),
+        Input("queue-version", "data"),
+        Input("work-tabs", "active_tab"),
+    ],
+)
+def update_after_dropdown(run_data, _version, active_tab):
+    """The jobs queued or running on the run's server, which a new job can be chained after."""
+    if not run_data or not run_data.get("server"):
+        return []
+    if ctx.triggered_id == "work-tabs" and active_tab != "dmx":
+        return no_update
+    try:
+        state = draugr_queue.status(run_data["server"], history=0)
+    except draugr_queue.QueueError:
+        return []
+    return [
+        {"label": f"{_job_label(job)}, {job['state']}", "value": job["tsp_id"]}
+        for job in draugr_queue.active_jobs(state)
+    ]
+
+
 @app.callback(Output("queue-interval", "disabled"), Input("work-tabs", "active_tab"))
 def toggle_queue_refresh(active_tab):
-    """Only poll SLURM while the Queue tab is open."""
+    """Only poll the server while the Queue tab is open."""
     return active_tab != "queue"
 
 
@@ -678,43 +733,101 @@ def toggle_queue_refresh(active_tab):
 def refresh_queue(_n_intervals, active_tab, _version, run_data):
     if active_tab != "queue":
         return no_update
+    if not run_data or not run_data.get("server"):
+        return make_banner("This run has no server location in B-Fabric, so there is no queue to show.", "error")
     try:
-        jobs = slurm_queue.list_jobs(days=QUEUE_HISTORY_DAYS)
-    except SLURM_ERRORS as e:
-        return make_banner(f"Could not read the SLURM queue: {e}", "error")
-    return queue_view(jobs, (run_data or {}).get("datafolder"), QUEUE_HISTORY_DAYS)
+        state = draugr_queue.status(run_data["server"], history=QUEUE_HISTORY_EVENTS)
+    except draugr_queue.QueueError as e:
+        return make_banner(f"Could not read the draugr queue on {run_data['server']}: {e}", "error")
+    return queue_view(state, run_data.get("datafolder"))
+
+
+def _queue_action_dialog(action, job):
+    """Title, body and confirm button (label, class) of the dialog confirming an action on a job."""
+    label = _job_label(job)
+    danger = "bf-btn bf-btn--danger"
+    if action == "remove":
+        return (
+            f"Remove job {job['tsp_id']}?",
+            f"The {label} is waiting in the queue and has not started. Removing it takes it off the queue.",
+            "Remove job",
+            danger,
+        )
+    if action == "stop":
+        return (
+            f"Stop job {job['tsp_id']}?",
+            [
+                html.P(
+                    f"The {label} is running draugr now. Stopping it kills draugr and "
+                    "bcl-convert wherever they are."
+                ),
+                html.Ul([
+                    html.Li("The run folder may be left with partial output."),
+                    html.Li("The run's status in B-Fabric stays at demultiplexing, and no failure email is sent."),
+                    html.Li("Jobs set to run after it are not run; the next job in the queue starts."),
+                ]),
+            ],
+            "Stop job",
+            danger,
+        )
+    if action == "clear":
+        return (
+            f"Clear lost job {job['tsp_id']}?",
+            f"This only clears the lost {label} from the list. Nothing is queued.",
+            "Clear",
+            danger,
+        )
+    # requeue
+    body = [html.P(f"This queues the lost {label} again with the same draugr arguments, then clears it.")]
+    if job.get("interrupted"):
+        body.append(html.P(
+            "draugr was running when this job was lost and may have left partial output in the run "
+            "folder. Check it before queueing the job again.",
+            className="bf-bold",
+        ))  # fmt: skip
+    if job.get("after"):
+        waited = ", ".join(str(a["tsp_id"]) for a in job["after"])
+        body.append(html.P(
+            f"It waited for job(s) {waited}. Queued again, it will not wait for them: queue those "
+            "first, or use Run after on the Draugr / DMX tab instead."
+        ))  # fmt: skip
+    return f"Queue job {job['tsp_id']} again?", body, "Queue again", "bf-btn"
 
 
 @app.callback(
     [
-        Output("cancel-modal", "is_open"),
-        Output("cancel-modal-body", "children"),
-        Output("cancel-target", "data"),
+        Output("queue-action-modal", "is_open"),
+        Output("queue-action-title", "children"),
+        Output("queue-action-body", "children"),
+        Output("queue-action-confirm", "children"),
+        Output("queue-action-confirm", "className"),
+        Output("queue-action-target", "data"),
     ],
     [
-        Input({"type": "cancel-job", "id": ALL, "state": ALL}, "n_clicks"),
-        Input("cancel-dismiss", "n_clicks"),
-        Input("cancel-confirm", "n_clicks"),
+        Input({"type": "queue-action", "action": ALL, "key": ALL}, "n_clicks"),
+        Input("queue-action-dismiss", "n_clicks"),
+        Input("queue-action-confirm", "n_clicks"),
     ],
+    State("run_data", "data"),
     prevent_initial_call=True,
 )
-def toggle_cancel_modal(_clicks, _dismiss, _confirm):
+def toggle_queue_action_modal(_clicks, _dismiss, _confirm, run_data):
     trigger = ctx.triggered_id
-    if trigger in ("cancel-dismiss", "cancel-confirm"):
-        return False, no_update, no_update
-    # Every refresh re-creates the Cancel buttons, which fires this without a click.
+    if trigger in ("queue-action-dismiss", "queue-action-confirm"):
+        return False, no_update, no_update, no_update, no_update, no_update
+    # Every refresh re-creates the buttons, which fires this without a click.
     if not ctx.triggered or not ctx.triggered[0]["value"]:
-        return no_update, no_update, no_update
+        return (no_update,) * 6
 
-    jobid = trigger["id"]
-    if trigger["state"] == "PENDING":
-        body = f"Job {jobid} is waiting in the queue and has not started. Cancelling removes it."
-    else:
-        body = (
-            f"Job {jobid} is running draugr now. Cancelling stops it on the server, bcl-convert "
-            "included. Whatever it has already written stays in place."
-        )
-    return True, body, {"jobid": jobid}
+    # Describe the job as the server has it now, not as the page last showed it.
+    try:
+        job = draugr_queue.find(draugr_queue.status(run_data["server"], history=0), trigger["key"])
+    except draugr_queue.QueueError as e:
+        return True, "Could not read the queue", str(e), "Close", "bf-btn", None
+    if job is None:
+        return True, "Job gone", "This job is no longer in the queue.", "Close", "bf-btn", None
+    title, body, confirm, confirm_class = _queue_action_dialog(trigger["action"], job)
+    return True, title, body, confirm, confirm_class, {"action": trigger["action"], "key": trigger["key"]}
 
 
 @app.callback(
@@ -722,30 +835,91 @@ def toggle_cancel_modal(_clicks, _dismiss, _confirm):
         Output("bf-notification", "children", allow_duplicate=True),
         Output("queue-version", "data", allow_duplicate=True),
     ],
-    Input("cancel-confirm", "n_clicks"),
+    Input("queue-action-confirm", "n_clicks"),
     [
-        State("cancel-target", "data"),
+        State("queue-action-target", "data"),
         State("token_data", "data"),
+        State("run_data", "data"),
         State("queue-version", "data"),
     ],
     prevent_initial_call=True,
+    running=[(Output("queue-action-confirm", "disabled"), True, False)],
 )
-def cancel_job(n_clicks, target, token_data, queue_version):
+def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
     if not n_clicks or not target or not token_data:
         return no_update, no_update
-    jobid = target["jobid"]
+    server, key, action = run_data["server"], target["key"], target["action"]
+    login = as_token_data(token_data).subject
+    refreshed = (queue_version or 0) + 1
     try:
-        slurm_queue.cancel(jobid)
-    except SLURM_ERRORS as e:
-        return make_banner(f"Could not cancel job {jobid}: {e}", "error"), (queue_version or 0) + 1
+        state = draugr_queue.status(server, history=0)
+        job = draugr_queue.find(state, key)
+        if job is None:
+            return _banner("That job is no longer in the queue.", "warning"), refreshed
+        label = _job_label(job)
+        if action == "stop":
+            try:
+                draugr_queue.stop(server, key, by=login)
+            except draugr_queue.QueueError as e:
+                # It finished between the last refresh and the click: not an error.
+                if draugr_queue.not_running(e):
+                    return _banner(f"The {label} had already ended.", "info"), refreshed
+                raise
+            message, params = f"Stopped the {label}.", {}
+        elif action == "requeue":
+            if job not in state["lost"]:
+                return _banner(f"The {label} is no longer lost.", "warning"), refreshed
+            tsp_id = draugr_queue.submit(
+                server,
+                job.get("run_folder") or f"{draugr_queue.DATA_DIR}/{job['run']}",
+                job["draugr_args"],
+                login,
+            )
+            draugr_queue.remove(server, key)
+            message, params = f"Queued the lost {label} again as job {tsp_id}.", {"new_tsp_id": tsp_id}
+        else:  # remove, clear
+            draugr_queue.remove(server, key)
+            message, params = f"{'Removed' if action == 'remove' else 'Cleared'} the {label}.", {}
+    except draugr_queue.QueueError as e:
+        return _banner(f"Could not {action} the job: {e}", "error"), refreshed
 
     get_logger(token_data).log_operation(
         operation="execute",
-        message="DMX job cancelled",
-        params={"job_id": jobid},
+        message=f"DMX job {action}",
+        params={
+            "server": server,
+            "key": key,
+            "tsp_id": job["tsp_id"],
+            "draugr_args": job.get("draugr_args"),
+            **params,
+        },
         flush_logs=True,
     )
-    return make_banner(f"Cancelled draugr job {jobid}.", "info"), (queue_version or 0) + 1
+    return _banner(message, "info"), refreshed
+
+
+@app.callback(
+    [
+        Output("log-modal", "is_open"),
+        Output("log-modal-title", "children"),
+        Output("log-modal-body", "children"),
+    ],
+    Input({"type": "job-log", "key": ALL}, "n_clicks"),
+    State("run_data", "data"),
+    prevent_initial_call=True,
+)
+def show_log(_clicks, run_data):
+    """The tail of a job's console output, looked up by key so only queue logs can be read."""
+    if not ctx.triggered or not ctx.triggered[0]["value"]:
+        return no_update, no_update, no_update
+    server = run_data["server"]
+    try:
+        job = draugr_queue.find(draugr_queue.status(server, history=QUEUE_HISTORY_EVENTS), ctx.triggered_id["key"])
+        if not job or not job.get("log"):
+            return True, "No log", "This job has no log (yet)."
+        return True, f"Log of {_job_label(job)} (last 200 lines)", draugr_queue.log_tail(server, job["log"])
+    except draugr_queue.QueueError as e:
+        return True, "Could not read the log", str(e)
 
 
 # --- Disable Submit buttons and Tooltips when no orders selected ---
