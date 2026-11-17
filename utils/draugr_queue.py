@@ -22,6 +22,8 @@ import subprocess
 UV = "/usr/local/ngseq/packages/Dev/uv/0.13.7/uv"
 DRAUGR_DIR = "/export/local/analyses/draugr_exec"
 DATA_DIR = "/export/local/data"
+# How much of a job's console output the Log dialog shows.
+LOG_TAIL_LINES = 200
 
 # What a finished job's exit code means.
 EXIT_CODES = {
@@ -82,7 +84,13 @@ def submit(server, run_folder, draugr_args, submitter, after=()):
 
 def status(server, history=50):
     """The server's queue (jobs, lost, history) with each job's orders and queue position."""
-    return annotate(json.loads(_draugr_queue(server, "status", "--history", str(history), timeout=30)))
+    out = _draugr_queue(server, "status", "--history", str(history), timeout=30)
+    # Callers only handle QueueError, so a reply that is not the expected JSON
+    # (e.g. a login banner on stdout) must not escape as anything else.
+    try:
+        return annotate(json.loads(out))
+    except (ValueError, KeyError, TypeError) as e:
+        raise QueueError(f"Unreadable draugr-queue status from {server}: {e!r}") from None
 
 
 def remove(server, key):
@@ -105,7 +113,7 @@ def not_running(error):
     return "is not running" in str(error)
 
 
-def log_tail(server, log, lines=200):
+def log_tail(server, log, lines=LOG_TAIL_LINES):
     """The last lines of a job's console output; works while the job runs."""
     return _ssh(server, ["tail", "-n", str(lines), log], timeout=30)
 

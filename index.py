@@ -418,6 +418,9 @@ def toggle_modal(n1, n2, is_open, run_data):
 
     # Warn about anything already queued for this run, so it can be removed first.
     # Not a block: the new job would only start after them anyway.
+    if not run_data or not run_data.get("server"):
+        # Submitting will report the missing run data itself.
+        return True, "Are you sure you're ready to demux?"
     try:
         state = draugr_queue.status(run_data["server"], history=0)
         active = draugr_queue.active_for_run(state, run_data["datafolder"])
@@ -570,7 +573,7 @@ def execute_draugr_command(
             )
         except draugr_queue.QueueError as e:
             return (
-                make_banner(f"Demultiplexing could not be queued: {e}", "error"),
+                _banner(f"Demultiplexing could not be queued: {e}", "error"),
                 no_update,
                 no_update,
                 no_update,
@@ -578,12 +581,14 @@ def execute_draugr_command(
             )
 
         # The key identifies the job for good; the tsp id restarts with the server.
-        key, ahead = None, None
+        # A job can already have finished (e.g. draugr rejected its arguments),
+        # so look it up among all the server's jobs, not only the active ones.
+        key, ahead, ours = None, None, None
         try:
-            active = draugr_queue.active_jobs(draugr_queue.status(server_name, history=0))
-            ours = [job for job in active if job["tsp_id"] == tsp_id]
-            key = ours[0]["key"] if ours else None
-            ahead = len([job for job in active if job["tsp_id"] < tsp_id])
+            state = draugr_queue.status(server_name, history=0)
+            ours = next((job for job in state["jobs"] if job["tsp_id"] == tsp_id), None)
+            key = ours["key"] if ours else None
+            ahead = len([job for job in draugr_queue.active_jobs(state) if job["tsp_id"] < tsp_id])
         except draugr_queue.QueueError:
             pass
 
@@ -600,7 +605,10 @@ def execute_draugr_command(
             flush_logs=True,
         )
 
-        if ahead is None:
+        if ours and ours["state"] == "finished":
+            outcome = draugr_queue.EXIT_CODES.get(ours.get("exit_code"), f"exit {ours.get('exit_code')}")
+            when = f"It has already ended: {outcome}."
+        elif ahead is None:
             when = "See the Queue tab for its place in the queue."
         elif ahead:
             when = f"There are {ahead} job(s) ahead of it on that server."
@@ -851,6 +859,7 @@ def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
     server, key, action = run_data["server"], target["key"], target["action"]
     login = as_token_data(token_data).subject
     refreshed = (queue_version or 0) + 1
+    severity = "info"
     try:
         state = draugr_queue.status(server, history=0)
         job = draugr_queue.find(state, key)
@@ -875,8 +884,18 @@ def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
                 job["draugr_args"],
                 login,
             )
-            draugr_queue.remove(server, key)
-            message, params = f"Queued the lost {label} again as job {tsp_id}.", {"new_tsp_id": tsp_id}
+            params = {"new_tsp_id": tsp_id}
+            try:
+                draugr_queue.remove(server, key)
+                message = f"Queued the lost {label} again as job {tsp_id}."
+            except draugr_queue.QueueError as e:
+                # The new job is queued; only clearing the old entry failed.
+                # Saying "could not requeue" here would invite a second, duplicate run.
+                severity = "warning"
+                message = (
+                    f"Queued the lost {label} again as job {tsp_id}, but could not clear the "
+                    f"lost entry ({e}). Use Clear on it; do not queue it again."
+                )
         else:  # remove, clear
             draugr_queue.remove(server, key)
             message, params = f"{'Removed' if action == 'remove' else 'Cleared'} the {label}.", {}
@@ -895,7 +914,7 @@ def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
         },
         flush_logs=True,
     )
-    return _banner(message, "info"), refreshed
+    return _banner(message, severity), refreshed
 
 
 @app.callback(
@@ -917,7 +936,8 @@ def show_log(_clicks, run_data):
         job = draugr_queue.find(draugr_queue.status(server, history=QUEUE_HISTORY_EVENTS), ctx.triggered_id["key"])
         if not job or not job.get("log"):
             return True, "No log", "This job has no log (yet)."
-        return True, f"Log of {_job_label(job)} (last 200 lines)", draugr_queue.log_tail(server, job["log"])
+        lines = draugr_queue.LOG_TAIL_LINES
+        return True, f"Log of {_job_label(job)} (last {lines} lines)", draugr_queue.log_tail(server, job["log"], lines)
     except draugr_queue.QueueError as e:
         return True, "Could not read the log", str(e)
 

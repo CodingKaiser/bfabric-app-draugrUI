@@ -146,3 +146,11 @@ def test_find_searches_current_lost_and_past(state):
     assert dq.find(state, "k1")["interrupted"] is False
     assert dq.find(state, "k5")["event"] == "removed"
     assert dq.find(state, "nope") is None
+
+
+@pytest.mark.parametrize("stdout", ["", "Welcome to fgcz-s-023\n{}", '{"server": "fgcz-s-023"}'])
+def test_unreadable_status_is_a_queue_error(ssh, stdout):
+    # Callers only catch QueueError; anything else would fail the callback.
+    ssh(stdout=stdout)
+    with pytest.raises(dq.QueueError, match="Unreadable"):
+        dq.status("fgcz-s-023")

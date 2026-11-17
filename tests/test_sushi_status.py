@@ -73,12 +73,12 @@ def test_recent_submissions_expire_and_ignore_other_runs(tmp_path):
         (folder / name).write_text(json.dumps({
             "run": run, "orders": orders, "submitted_at": when.isoformat(timespec="seconds"),
         }))  # fmt: skip
-    assert set(ss.recent_submissions("X570", now=now, jobs_dir=tmp_path)) == {"1"}
+    assert set(ss.recent_submissions("X570", now=now, state_dir=tmp_path)) == {"1"}
 
 
 def test_record_then_read_submission(tmp_path):
-    ss.record_submission("X570", [12345], "falkonoe", jobs_dir=tmp_path)
-    assert set(ss.recent_submissions("X570", jobs_dir=tmp_path)) == {"12345"}
+    ss.record_submission("X570", [12345], "falkonoe", state_dir=tmp_path)
+    assert set(ss.recent_submissions("X570", state_dir=tmp_path)) == {"12345"}
 
 
 def test_demuxing_orders_counts_a_full_run_for_every_order():

@@ -1,7 +1,9 @@
 """
 Command builders for the Draugr and Sushi pipelines.
 
-Neither function executes anything directly.
+Neither builder runs the commands it builds: build_draugr_args() runs nothing,
+and generate_sushi_command() only runs ssh ls checks (check_if_file_exists())
+and returns its two commands for the caller to run.
 
   build_draugr_args()        — builds draugr's own arguments for a run. They are
                                 queued with draugr-queue on the run's server (see

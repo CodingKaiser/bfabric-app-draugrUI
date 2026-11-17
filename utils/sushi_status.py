@@ -76,9 +76,9 @@ def matching_dataset(datasets, order_id, run_name):
     return None
 
 
-def record_submission(run_name, orders, submitter, jobs_dir=None):
+def record_submission(run_name, orders, submitter, state_dir=None):
     """Note that orders were sushified from the app, for the Submitted status."""
-    folder = (jobs_dir or STATE_DIR) / "sushify"
+    folder = (state_dir or STATE_DIR) / "sushify"
     folder.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     record = {
@@ -90,10 +90,10 @@ def record_submission(run_name, orders, submitter, jobs_dir=None):
     (folder / f"{run_name}_{now:%Y%m%dT%H%M%S}.json").write_text(json.dumps(record, indent=2))
 
 
-def recent_submissions(run_name, now=None, jobs_dir=None):
+def recent_submissions(run_name, now=None, state_dir=None):
     """Order id -> time it was last sushified from the app, within SUBMITTED_WINDOW."""
     now = now or datetime.now()
-    folder = (jobs_dir or STATE_DIR) / "sushify"
+    folder = (state_dir or STATE_DIR) / "sushify"
     submitted = {}
     for path in sorted(folder.glob(f"{run_name}_*.json")):
         try:
