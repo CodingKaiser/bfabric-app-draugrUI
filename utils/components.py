@@ -290,12 +290,29 @@ def _outcome(job):
             html.Div(text if code == 0 else f"{text} ({code})", className="bf-muted")]  # fmt: skip
 
 
-def _past_row(job, run_folder):
-    return _row(job, run_folder, [
-        job.get("tsp_id", "—"), _outcome(job), job["run"], _orders(job), job.get("source") or "—",
+def _past_row(job):
+    return html.Tr([html.Td(cell) for cell in [
+        job.get("tsp_id", "—"), _outcome(job), _orders(job), job.get("source") or "—",
         job.get("submitter") or "—", _when(job.get("submitted_at")), _when(job.get("started_at")),
         _when(job.get("finished_at")), _parameters(job), _log_button(job),
-    ])  # fmt: skip
+    ]])  # fmt: skip
+
+
+def _held_up_by(active, run_folder):
+    """A warning when another run's job holds the server, so this run's jobs cannot start yet."""
+    running = next((job for job in active if job["state"] == "running"), None)
+    if running is None or running["run"] == run_folder:
+        return ""
+    waiting = sum(job["run"] == run_folder for job in active)
+    if waiting:
+        effect = f"{waiting} job{'s' if waiting > 1 else ''} for this run {'are' if waiting > 1 else 'is'} waiting behind it."
+    else:
+        effect = "Anything queued for this run now waits until it ends."
+    return html.Div(
+        [_pill("busy", "warn"), " ", html.B(running["run"]),
+         f" is running on this server (job {running['tsp_id']}, since {_when(running.get('started_at'))}). {effect}"],
+        style={"marginBottom": "8px"},
+    )  # fmt: skip
 
 
 def queue_view(state, run_folder):
@@ -314,19 +331,23 @@ def queue_view(state, run_folder):
     active = draugr_queue.active_jobs(state)
     panels.append(_panel(
         f"Queue on {state['server']}",
-        _table(
-            ["Job", "State", "Run", "Orders", "Source", "Submitted by", "Submitted", "After", "Parameters", ""],
-            [_current_row(job, run_folder) for job in active],
-        ) if active else html.P("No draugr jobs are queued or running.", className="bf-muted"),
+        [
+            _held_up_by(active, run_folder),
+            _table(
+                ["Job", "State", "Run", "Orders", "Source", "Submitted by", "Submitted", "After", "Parameters", ""],
+                [_current_row(job, run_folder) for job in active],
+            ) if active else html.P("No draugr jobs are queued or running.", className="bf-muted"),
+        ],
     ))  # fmt: skip
 
+    past = [job for job in state["past"] if job["run"] == run_folder]
     panels.append(_panel(
-        "Ended",
+        "Ended for this run",
         _table(
-            ["Job", "Outcome", "Run", "Orders", "Source", "Submitted by", "Submitted", "Started",
+            ["Job", "Outcome", "Orders", "Source", "Submitted by", "Submitted", "Started",
              "Ended", "Parameters", ""],
-            [_past_row(job, run_folder) for job in state["past"]],
-        ) if state["past"] else html.P("None.", className="bf-muted"),
+            [_past_row(job) for job in past],
+        ) if past else html.P("None recently.", className="bf-muted"),
     ))  # fmt: skip
     return panels
 
@@ -524,8 +545,10 @@ documentation_content = [
         wait in the same queue.""",
         html.Br(), html.Br(),
         """The Queue tab shows that server's running job, its queued jobs in order, and the jobs that have
-        ended. "Parameters" shows the exact draugr arguments a job was given, and "Log" its console output,
-        also while it runs. Rows for the run you opened are highlighted.""",
+        ended for the run you opened. If another run's job is running, a note above the queue says so,
+        since this run's jobs cannot start until it ends. "Parameters" shows the exact draugr arguments
+        a job was given, and "Log" its console output, also while it runs. Rows for the run you opened
+        are highlighted.""",
         html.Br(), html.Br(),
         html.B("Remove:"),
         " takes a queued job off the queue.",

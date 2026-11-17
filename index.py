@@ -79,7 +79,7 @@ with open("pyproject.toml", "rb") as f:
     app_version = tomllib.load(f).get("project", {}).get("version", "unknown")
 
 # How many history events the Queue tab reads to list the jobs that have ended.
-QUEUE_HISTORY_EVENTS = 50
+QUEUE_HISTORY_EVENTS = 500
 
 # ==================== (1) App ====================
 
