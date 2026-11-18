@@ -40,9 +40,9 @@ def get_user_wrapper(token_data) -> Bfabric:
         RuntimeError: If the OAuth session has expired and the user has to re-open
             the app from B-Fabric.
     """
-    return bfabric_interface.get_wrapper(as_token_data(token_data))
+    return bfabric_interface.get_wrapper(as_token_data(token_data))  # ty: ignore[invalid-argument-type]  # library still annotates its deprecated TokenData alias
 
 
 def get_logger(token_data) -> Logger:
     """Return a Logger that writes audit entries under the service account."""
-    return library_get_logger(as_token_data(token_data))
+    return library_get_logger(as_token_data(token_data))  # ty: ignore[invalid-argument-type]  # library still annotates its deprecated TokenData alias

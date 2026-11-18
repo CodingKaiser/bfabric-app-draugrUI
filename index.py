@@ -380,7 +380,7 @@ def update_sushi_status(run_data, _version, active_tab, token_data):
         rows = sushi_status.order_statuses(
             token_data, run_data["name"], run_data["datafolder"], orders, queue_state
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — any B-Fabric/OAuth failure, see below
         # An expired OAuth session raises here; the orders can still be sushified.
         return (
             make_banner(f"Could not load the sushification status: {e}", "error"),

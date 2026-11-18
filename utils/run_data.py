@@ -110,11 +110,11 @@ def fetch_run_entity_data(token_data) -> dict | None:
                     flush_logs=False,
                 )
 
-        container_ids = list(set([
+        container_ids = list({
             sample.get("container", {}).get("id")
             for sample in samples
             if sample.get("container")
-        ]))
+        })
 
         sample_lanes[str(lane.get("position"))] = [
             f"{cid} {L.logthis(api_call=wrapper.read, endpoint='container', obj={'id': str(cid)}, max_results=None, flush_logs=False)[0].get('name', '')}"
