@@ -378,6 +378,9 @@ _SUSHI_STATUS_PILL = {
 }
 
 
+_LEFT = {"textAlign": "left"}  # .bf-stats centres cells
+
+
 def sushi_status_table(rows, order_names, dataset_url):
     """One row per order: its status and, once sushified, a link to the dataset."""
 
@@ -392,13 +395,13 @@ def sushi_status_table(rows, order_names, dataset_url):
         html.Div("Sushification status", className="bf-panel-header"),
         html.Div(className="bf-panel-body", children=html.Table(
             [
-                html.Thead(html.Tr([html.Th(h) for h in ["Order", "Name", "Status", "Dataset"]])),
+                html.Thead(html.Tr([html.Th(h, style=_LEFT) for h in ["Order", "Name", "Status", "Dataset"]])),
                 html.Tbody([
                     html.Tr([
-                        html.Td(row["order"]),
-                        html.Td(order_names.get(row["order"], "")),
-                        html.Td(_pill(row["status"], _SUSHI_STATUS_PILL[row["status"]])),
-                        html.Td(dataset_cell(row)),
+                        html.Td(row["order"], style=_LEFT),
+                        html.Td(order_names.get(row["order"], ""), style=_LEFT),
+                        html.Td(_pill(row["status"], _SUSHI_STATUS_PILL[row["status"]]), style=_LEFT),
+                        html.Td(dataset_cell(row), style=_LEFT),
                     ])
                     for row in rows
                 ]),
