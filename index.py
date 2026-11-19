@@ -28,12 +28,12 @@ Callback responsibilities:
   - update_lane_display         : render lane cards from run data
   - update_registration_status  : per-order BF registration status, Registration dropdown
   - update_after_dropdown       : the server's queued/running jobs, for Run after
-  - toggle_modal / toggle_modal2 : open/close confirmation dialogs
+  - toggle_modal / toggle_registration_modal : open/close confirmation dialogs
   - execute_draugr_command      : queue a Draugr run, or fire the BF registration SSH commands
   - toggle_queue_refresh / refresh_queue : the Queue tab's live job list
   - toggle_queue_action_modal / run_queue_action : remove a queued job, stop the running one, clear or re-queue a lost one
   - show_log                    : tail of a job's console output
-  - toggle_submit_button / _2   : disable submit when no orders selected
+  - toggle_submit_button(s)      : disable submit when no orders selected
   - reset_form_state            : reset switches/inputs on every page load
 """
 
@@ -65,10 +65,10 @@ from utils.components import (
     lane_card,
     log_modal,
     modal,
-    modal2,
     queue_action_modal,
     queue_pane,
     queue_view,
+    registration_modal,
     registration_sidebar,
     registration_status_table,
 )
@@ -112,7 +112,11 @@ def _work_pane(sidebar, display_id, loading_text):
             # Starts on the spinner: Dash holds update_lane_display back until
             # load_run_data has answered, so nothing else would fill the pane
             # while B-Fabric is being queried.
-            html.Div(id=display_id, className="bf-fill", children=_lanes_loading(loading_text)),
+            html.Div(
+                id=display_id,
+                className="bf-fill",
+                children=_lanes_loading(loading_text),
+            ),
         ],
     )
 
@@ -151,7 +155,7 @@ main_content = html.Div(
         dbc.Tooltip(
             "Element/Aviti only. Custom bases2fastq flags, arguments separated by ';'. "
             'E.g. "--i1-cycles 8;--r2-cycles 40". Do not include the '
-            'quotation marks when specifying this option.',
+            "quotation marks when specifying this option.",
             target="bases2fastq-input",
         ),
         dbc.Tooltip(
@@ -181,18 +185,22 @@ main_content = html.Div(
         ),
         dbc.Tooltip(
             "Select at least one order from the dropdown above to enable submission.",
-            target="submit-btn-wrapper-2",
-            id="submit-tooltip-2",
+            target="registration-btn-wrapper",
+            id="registration-tooltip",
         ),
         # Confirmation modals
         modal,
-        modal2,
+        registration_modal,
         queue_action_modal,
         log_modal,
         dbc.Tabs(
             [
                 dbc.Tab(
-                    _work_pane(default_sidebar, "lane-display", "Querying B-Fabric for the run's lanes…"),
+                    _work_pane(
+                        default_sidebar,
+                        "lane-display",
+                        "Querying B-Fabric for the run's lanes…",
+                    ),
                     label="Draugr / DMX",
                     tab_id="dmx",
                 ),
@@ -265,7 +273,9 @@ def load_run_data(token_data):
     """Traverse run → rununit → lane → sample → container for the launching run."""
     # The error path is a plain dict rather than a token context, and a
     # non-elevated user has no web service access to traverse with.
-    if not token_data or (isinstance(token_data, dict) and token_data.get("access_denied")):
+    if not token_data or (
+        isinstance(token_data, dict) and token_data.get("access_denied")
+    ):
         return None
 
     if not as_token_data(token_data).is_employee:
@@ -324,7 +334,9 @@ def update_lane_display(run_data, selected_orders):
 
     def make_lane_card(pos, ids):
         # ids is a list of strings like "12345 OrderName"
-        highlight = any(str(order_str).split(" ")[0] in selected_set for order_str in ids)
+        highlight = any(
+            str(order_str).split(" ")[0] in selected_set for order_str in ids
+        )
         return lane_card(lane_position=pos, container_ids=ids, highlight=highlight)
 
     if len(lanes) != 8:
@@ -346,8 +358,8 @@ def update_lane_display(run_data, selected_orders):
 @app.callback(
     [
         Output("registration-status-display", "children"),
-        Output("draugr-dropdown-2", "options"),
-        Output("draugr-dropdown-2", "value"),
+        Output("registration-dropdown", "options"),
+        Output("registration-dropdown", "value"),
     ],
     [
         Input("run_data", "data"),
@@ -391,12 +403,17 @@ def update_registration_status(run_data, _version, active_tab, token_data):
     names = _order_names(run_data)
     base_url = str(as_token_data(token_data).base_url).rstrip("/")
     options = [
-        {"label": f"{r['order']} {names.get(r['order'], '')} — {r['status']}", "value": r["order"]}
+        {
+            "label": f"{r['order']} {names.get(r['order'], '')} — {r['status']}",
+            "value": r["order"],
+        }
         for r in rows
     ]
     ready = [r["order"] for r in rows if r["status"] == registration_status.READY]
     return (
-        registration_status_table(rows, names, lambda i: f"{base_url}/dataset/show.html?id={i}"),
+        registration_status_table(
+            rows, names, lambda i: f"{base_url}/dataset/show.html?id={i}"
+        ),
         options,
         no_update if switched_tab else ready,
     )
@@ -431,13 +448,15 @@ def toggle_modal(n1, n2, is_open, run_data):
         return True, "Are you sure you're ready to demux?"
     return True, [
         html.P("This run already has draugr jobs in the queue:"),
-        html.Ul([
-            html.Li(
-                f"Job {job['tsp_id']}, {job['state']}, orders "
-                f"{', '.join(job['orders'] or ['all'])} (submitted by {job.get('submitter') or 'unknown'})"
-            )
-            for job in active
-        ]),
+        html.Ul(
+            [
+                html.Li(
+                    f"Job {job['tsp_id']}, {job['state']}, orders "
+                    f"{', '.join(job['orders'] or ['all'])} (submitted by {job.get('submitter') or 'unknown'})"
+                )
+                for job in active
+            ]
+        ),
         html.P(
             "A new submission will wait until they have finished. Remove queued ones on the "
             "Queue tab first if they are no longer wanted."
@@ -446,11 +465,14 @@ def toggle_modal(n1, n2, is_open, run_data):
 
 
 @app.callback(
-    Output("modal2", "is_open"),
-    [Input("draugr-button-2", "n_clicks"), Input("close2", "n_clicks")],
-    [State("modal2", "is_open")],
+    Output("registration-modal", "is_open"),
+    [
+        Input("registration-button", "n_clicks"),
+        Input("registration-confirm", "n_clicks"),
+    ],
+    [State("registration-modal", "is_open")],
 )
-def toggle_modal2(n1, n2, is_open):
+def toggle_registration_modal(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
@@ -479,7 +501,7 @@ def _banner(message, severity):
     ],
     [
         Input("close", "n_clicks"),
-        Input("close2", "n_clicks"),
+        Input("registration-confirm", "n_clicks"),
     ],
     [
         State("draugr-dropdown", "value"),
@@ -495,18 +517,21 @@ def _banner(message, severity):
         State("barcode-mismatches-input", "value"),
         State("token_data", "data"),
         State("run_data", "data"),
-        State("draugr-dropdown-2", "value"),
+        State("registration-dropdown", "value"),
         State("queue-version", "data"),
         State("registration-version", "data"),
     ],
     prevent_initial_call=True,
     # draugr-queue queues the same run as often as it is asked to, so a double
     # click on Yes! must not get through as a second submission.
-    running=[(Output("close", "disabled"), True, False), (Output("close2", "disabled"), True, False)],
+    running=[
+        (Output("close", "disabled"), True, False),
+        (Output("registration-confirm", "disabled"), True, False),
+    ],
 )
 def execute_draugr_command(
     n_clicks,
-    n_clicks2,
+    registration_clicks,
     orders,
     after,
     gstore,
@@ -520,7 +545,7 @@ def execute_draugr_command(
     barcode_mismatches,
     token_data,
     run_data,
-    orders2,
+    registration_orders,
     queue_version,
     registration_version,
 ):
@@ -530,7 +555,9 @@ def execute_draugr_command(
     # prevent_initial_call does not cover the Yes! buttons being inserted by the
     # auth router, which fires this with n_clicks=0 on every page load. Only a
     # real click may launch anything or post a banner.
-    if not {"close": n_clicks, "close2": n_clicks2}.get(button_clicked):
+    if not {"close": n_clicks, "registration-confirm": registration_clicks}.get(
+        button_clicked
+    ):
         return no_update
 
     if not token_data:
@@ -588,7 +615,13 @@ def execute_draugr_command(
             state = draugr_queue.status(server_name, history=0)
             ours = next((job for job in state["jobs"] if job["tsp_id"] == tsp_id), None)
             key = ours["key"] if ours else None
-            ahead = len([job for job in draugr_queue.active_jobs(state) if job["tsp_id"] < tsp_id])
+            ahead = len(
+                [
+                    job
+                    for job in draugr_queue.active_jobs(state)
+                    if job["tsp_id"] < tsp_id
+                ]
+            )
         except draugr_queue.QueueError:
             pass
 
@@ -606,7 +639,9 @@ def execute_draugr_command(
         )
 
         if ours and ours["state"] == "finished":
-            outcome = draugr_queue.EXIT_CODES.get(ours.get("exit_code"), f"exit {ours.get('exit_code')}")
+            outcome = draugr_queue.EXIT_CODES.get(
+                ours.get("exit_code"), f"exit {ours.get('exit_code')}"
+            )
             when = f"It has already ended: {outcome}."
         elif ahead is None:
             when = "See the Queue tab for its place in the queue."
@@ -626,16 +661,19 @@ def execute_draugr_command(
             None,
         )
 
-    elif button_clicked == "close2":
-        if not orders2:
+    elif button_clicked == "registration-confirm":
+        if not registration_orders:
             return no_orders, no_update, no_update, no_update, no_update
 
         # The dropdown's value comes from the browser and ends up in a shell
         # command, so accept only this run's own orders.
         run_orders = {str(o) for o in (run_data or {}).get("containers", [])}
-        if not {str(o) for o in orders2} <= run_orders:
+        if not {str(o) for o in registration_orders} <= run_orders:
             return (
-                _banner("BF registration refused: some selected orders are not in this run.", "error"),
+                _banner(
+                    "BF registration refused: some selected orders are not in this run.",
+                    "error",
+                ),
                 no_update,
                 no_update,
                 no_update,
@@ -644,7 +682,7 @@ def execute_draugr_command(
 
         try:
             draugr_command1, draugr_command2 = du.generate_registration_command(
-                order_list=orders2, run_name=run_data["name"]
+                order_list=registration_orders, run_name=run_data["name"]
             )
         except (KeyError, OSError, ValueError):
             # No run name in run_data, a non-numeric order id, or the ssh existence check could not run.
@@ -699,7 +737,9 @@ def execute_draugr_command(
         )
 
         try:
-            registration_status.record_submission(run_data["name"], orders2, submitter)
+            registration_status.record_submission(
+                run_data["name"], registration_orders, submitter
+            )
         except OSError as e:
             # The BF registration itself is underway, but these orders will not show as
             # Submitted, so warn instead of letting them look Ready for a second submission.
@@ -782,11 +822,16 @@ def refresh_queue(_n_intervals, active_tab, _version, run_data):
     if active_tab != "queue":
         return no_update
     if not run_data or not run_data.get("server"):
-        return make_banner("This run has no server location in B-Fabric, so there is no queue to show.", "error")
+        return make_banner(
+            "This run has no server location in B-Fabric, so there is no queue to show.",
+            "error",
+        )
     try:
         state = draugr_queue.status(run_data["server"], history=QUEUE_HISTORY_EVENTS)
     except draugr_queue.QueueError as e:
-        return make_banner(f"Could not read the draugr queue on {run_data['server']}: {e}", "error")
+        return make_banner(
+            f"Could not read the draugr queue on {run_data['server']}: {e}", "error"
+        )
     return queue_view(state, run_data.get("datafolder"))
 
 
@@ -809,11 +854,17 @@ def _queue_action_dialog(action, job):
                     f"The {label} is running draugr now. Stopping it kills draugr and "
                     "bcl-convert wherever they are."
                 ),
-                html.Ul([
-                    html.Li("The run folder may be left with partial output."),
-                    html.Li("The run's status in B-Fabric stays at demultiplexing, and no failure email is sent."),
-                    html.Li("Jobs set to run after it are not run; the next job in the queue starts."),
-                ]),
+                html.Ul(
+                    [
+                        html.Li("The run folder may be left with partial output."),
+                        html.Li(
+                            "The run's status in B-Fabric stays at demultiplexing, and no failure email is sent."
+                        ),
+                        html.Li(
+                            "Jobs set to run after it are not run; the next job in the queue starts."
+                        ),
+                    ]
+                ),
             ],
             "Stop job",
             danger,
@@ -826,7 +877,11 @@ def _queue_action_dialog(action, job):
             danger,
         )
     # requeue
-    body = [html.P(f"This queues the lost {label} again with the same draugr arguments, then clears it.")]
+    body = [
+        html.P(
+            f"This queues the lost {label} again with the same draugr arguments, then clears it."
+        )
+    ]
     if job.get("interrupted"):
         body.append(html.P(
             "draugr was running when this job was lost and may have left partial output in the run "
@@ -869,13 +924,29 @@ def toggle_queue_action_modal(_clicks, _dismiss, _confirm, run_data):
 
     # Describe the job as the server has it now, not as the page last showed it.
     try:
-        job = draugr_queue.find(draugr_queue.status(run_data["server"], history=0), trigger["key"])
+        job = draugr_queue.find(
+            draugr_queue.status(run_data["server"], history=0), trigger["key"]
+        )
     except draugr_queue.QueueError as e:
         return True, "Could not read the queue", str(e), "Close", "bf-btn", None
     if job is None:
-        return True, "Job gone", "This job is no longer in the queue.", "Close", "bf-btn", None
+        return (
+            True,
+            "Job gone",
+            "This job is no longer in the queue.",
+            "Close",
+            "bf-btn",
+            None,
+        )
     title, body, confirm, confirm_class = _queue_action_dialog(trigger["action"], job)
-    return True, title, body, confirm, confirm_class, {"action": trigger["action"], "key": trigger["key"]}
+    return (
+        True,
+        title,
+        body,
+        confirm,
+        confirm_class,
+        {"action": trigger["action"], "key": trigger["key"]},
+    )
 
 
 @app.callback(
@@ -949,7 +1020,9 @@ def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
             except draugr_queue.QueueError as e:
                 # Someone else removed or cleared it after the last refresh: not an error.
                 if draugr_queue.already_removed(e):
-                    return _banner(f"The {label} had already been {done.lower()}.", "info"), refreshed
+                    return _banner(
+                        f"The {label} had already been {done.lower()}.", "info"
+                    ), refreshed
                 raise
             message, params = f"{done} the {label}.", {}
     except draugr_queue.QueueError as e:
@@ -986,15 +1059,26 @@ def show_log(_clicks, run_data):
         return no_update, no_update, no_update
     server = run_data["server"]
     try:
-        job = draugr_queue.find(draugr_queue.status(server, history=QUEUE_HISTORY_EVENTS), ctx.triggered_id["key"])
+        job = draugr_queue.find(
+            draugr_queue.status(server, history=QUEUE_HISTORY_EVENTS),
+            ctx.triggered_id["key"],
+        )
         if not job or not job.get("log"):
             return True, "No log", "This job has no log (yet)."
         lines = draugr_queue.LOG_TAIL_LINES
-        return True, f"Log of {_job_label(job)} (last {lines} lines)", draugr_queue.log_tail(server, job["log"], lines)
+        return (
+            True,
+            f"Log of {_job_label(job)} (last {lines} lines)",
+            draugr_queue.log_tail(server, job["log"], lines),
+        )
     except draugr_queue.QueueError as e:
         if draugr_queue.log_deleted(e):
             days = draugr_queue.LOG_RETENTION_DAYS
-            return True, "Log deleted", f"draugr deletes job logs after {days} days; this one is gone."
+            return (
+                True,
+                "Log deleted",
+                f"draugr deletes job logs after {days} days; this one is gone.",
+            )
         return True, "Could not read the log", str(e)
 
 
@@ -1012,10 +1096,13 @@ def toggle_submit_button(orders):
 
 
 @app.callback(
-    [Output("draugr-button-2", "disabled"), Output("submit-tooltip-2", "className")],
-    Input("draugr-dropdown-2", "value"),
+    [
+        Output("registration-button", "disabled"),
+        Output("registration-tooltip", "className"),
+    ],
+    Input("registration-dropdown", "value"),
 )
-def toggle_submit_button_2(orders):
+def toggle_registration_button(orders):
     is_disabled = not orders
     # Tooltip is hidden (d-none) when button is enabled (not disabled)
     return is_disabled, "" if is_disabled else "d-none"

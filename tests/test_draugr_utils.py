@@ -24,7 +24,13 @@ def test_switches_map_to_draugr_flags():
         disable_wizard=True,
         skip_raw_qc=True,
     )
-    for flag in ["--skip-gstore-copy", "--skip-post-demux", "--skip-demux", "--disable-wizard", "-xq"]:
+    for flag in [
+        "--skip-gstore-copy",
+        "--skip-post-demux",
+        "--skip-demux",
+        "--disable-wizard",
+        "-xq",
+    ]:
         assert flag in args
 
 
@@ -50,7 +56,9 @@ def test_empty_inputs_add_nothing():
     args = build_draugr_args(
         order_list=[1], bclconvert_flags="", bases_mask="", barcode_mismatches=""
     )
-    assert not any(a.startswith(("--custom", "--bases-mask", "--barcode-mismatches")) for a in args)
+    assert not any(
+        a.startswith(("--custom", "--bases-mask", "--barcode-mismatches")) for a in args
+    )
 
 
 def test_registration_pattern_matches_only_whole_order_ids():
@@ -59,7 +67,9 @@ def test_registration_pattern_matches_only_whole_order_ids():
     from utils.draugr_utils import registration_order_pattern
 
     pattern = re.compile(registration_order_pattern([12345, "123"]))
-    assert pattern.search("--dataset_name o12345_NovaSeq_260101_B014 --mango_run_name o12345_B014")
+    assert pattern.search(
+        "--dataset_name o12345_NovaSeq_260101_B014 --mango_run_name o12345_B014"
+    )
     assert pattern.search("--next_dataset_name o123_Fastqc")
     assert not pattern.search("--dataset_name o12399_NovaSeq_260101_B014")
     assert not pattern.search("--project 12345")

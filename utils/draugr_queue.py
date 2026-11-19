@@ -53,7 +53,12 @@ def _ssh(server, remote, timeout):
     ]  # fmt: skip
     try:
         result = subprocess.run(
-            argv, capture_output=True, text=True, errors="replace", timeout=timeout, check=False
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         raise QueueError(f"{server} did not answer within {timeout} s.") from None
@@ -62,12 +67,27 @@ def _ssh(server, remote, timeout):
     if result.returncode == 255:
         raise QueueError(f"Could not connect to {server}: {result.stderr.strip()}")
     if result.returncode:
-        raise QueueError(result.stderr.strip() or f"exited with {result.returncode} on {server}")
+        raise QueueError(
+            result.stderr.strip() or f"exited with {result.returncode} on {server}"
+        )
     return result.stdout
 
 
 def _draugr_queue(server, *args, timeout=60):
-    return _ssh(server, [UV, "run", "--frozen", "--no-sync", "--directory", DRAUGR_DIR, "draugr-queue", *args], timeout)
+    return _ssh(
+        server,
+        [
+            UV,
+            "run",
+            "--frozen",
+            "--no-sync",
+            "--directory",
+            DRAUGR_DIR,
+            "draugr-queue",
+            *args,
+        ],
+        timeout,
+    )
 
 
 def submit(server, run_folder, draugr_args, submitter, after=()):
@@ -78,7 +98,15 @@ def submit(server, run_folder, draugr_args, submitter, after=()):
     contain --run-folder. With `after`, the job runs draugr only if each of
     those jobs (tsp ids on the same server) succeeded.
     """
-    args = ["submit", "--run-folder", run_folder, "--source", "ui", "--submitter", submitter]
+    args = [
+        "submit",
+        "--run-folder",
+        run_folder,
+        "--source",
+        "ui",
+        "--submitter",
+        submitter,
+    ]
     for tsp_id in after:
         args += ["--after", str(tsp_id)]
     out = _draugr_queue(server, *args, "--", *draugr_args)
@@ -96,7 +124,9 @@ def status(server, history=50):
     try:
         return annotate(json.loads(out))
     except (ValueError, KeyError, TypeError) as e:
-        raise QueueError(f"Unreadable draugr-queue status from {server}: {e!r}") from None
+        raise QueueError(
+            f"Unreadable draugr-queue status from {server}: {e!r}"
+        ) from None
 
 
 def remove(server, key):
@@ -162,7 +192,10 @@ def past_jobs(history):
     ended = [job for job in merged.values() if job["event"] in ("finished", "removed")]
     for job in ended:
         job["orders"] = job_orders(job.get("draugr_args"))
-    ended.sort(key=lambda job: job.get("finished_at") or job.get("removed_at") or "", reverse=True)
+    ended.sort(
+        key=lambda job: job.get("finished_at") or job.get("removed_at") or "",
+        reverse=True,
+    )
     return ended
 
 
@@ -171,7 +204,9 @@ def annotate(state):
     Add each job's orders, each queued job's place in the queue (1 runs next),
     and the ended jobs from the history as `past`.
     """
-    queued = sorted((j for j in state["jobs"] if j["state"] == "queued"), key=lambda j: j["tsp_id"])
+    queued = sorted(
+        (j for j in state["jobs"] if j["state"] == "queued"), key=lambda j: j["tsp_id"]
+    )
     for position, job in enumerate(queued, start=1):
         job["position"] = position
     for job in state["jobs"] + state["lost"]:

@@ -87,7 +87,9 @@ def record_submission(run_name, orders, submitter, state_dir=None):
         "submitter": submitter,
         "submitted_at": now.isoformat(timespec="seconds"),
     }
-    (folder / f"{run_name}_{now:%Y%m%dT%H%M%S}.json").write_text(json.dumps(record, indent=2))
+    (folder / f"{run_name}_{now:%Y%m%dT%H%M%S}.json").write_text(
+        json.dumps(record, indent=2)
+    )
 
 
 def recent_submissions(run_name, now=None, state_dir=None):
@@ -110,7 +112,9 @@ def recent_submissions(run_name, now=None, state_dir=None):
     return submitted
 
 
-def derive_statuses(orders, run_name, demuxed, datasets_by_order, submissions, demuxing):
+def derive_statuses(
+    orders, run_name, demuxed, datasets_by_order, submissions, demuxing
+):
     """
     One status row per order. Pure, so it can be tested without B-Fabric or files.
 
@@ -134,13 +138,15 @@ def derive_statuses(orders, run_name, demuxed, datasets_by_order, submissions, d
             status = READY
         else:
             status = NOT_DEMUXED
-        rows.append({
-            "order": order,
-            "status": status,
-            "dataset_id": dataset.get("id") if dataset else None,
-            "dataset_name": dataset.get("name") if dataset else None,
-            "submitted_at": submissions.get(order),
-        })
+        rows.append(
+            {
+                "order": order,
+                "status": status,
+                "dataset_id": dataset.get("id") if dataset else None,
+                "dataset_name": dataset.get("name") if dataset else None,
+                "submitted_at": submissions.get(order),
+            }
+        )
     return rows
 
 
@@ -181,7 +187,9 @@ def order_statuses(token_data, run_name, run_folder, orders, queue_state):
     """
     script = find_registration_script(run_name)
     demuxed = demuxed_orders(script.read_text(), run_name) if script else set()
-    demuxing = demuxing_orders(queue_state, run_folder, orders) if queue_state else set()
+    demuxing = (
+        demuxing_orders(queue_state, run_folder, orders) if queue_state else set()
+    )
     return derive_statuses(
         orders,
         run_name,

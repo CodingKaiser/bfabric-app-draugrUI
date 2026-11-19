@@ -24,8 +24,14 @@ def test_find_registration_script_prefers_the_first_folder(tmp_path):
         folder.mkdir()
         (folder / "X570_sushification.sh").write_text("")
     (second / "X57_sushification.sh").write_text("")
-    assert ss.find_registration_script("X570", [first, second]) == first / "X570_sushification.sh"
-    assert ss.find_registration_script("X57", [first, second]) == second / "X57_sushification.sh"
+    assert (
+        ss.find_registration_script("X570", [first, second])
+        == first / "X570_sushification.sh"
+    )
+    assert (
+        ss.find_registration_script("X57", [first, second])
+        == second / "X57_sushification.sh"
+    )
     assert ss.find_registration_script("X999", [first, second]) is None
 
 

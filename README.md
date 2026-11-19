@@ -61,13 +61,15 @@ Four library calls do the framework wiring, in `index.py`:
 
 ```python
 app = create_app(title="DraugrUI")
-server = app.server                      # gunicorn target is "index:server"
+server = app.server  # gunicorn target is "index:server"
 
 app.layout = get_static_layout(
-    f"DraugrUI v{app_version}", html.Div(),   # placeholder; real content goes to the auth callback
-    documentation_content, layout_config={"bug": True},
+    f"DraugrUI v{app_version}",
+    html.Div(),  # placeholder; real content goes to the auth callback
+    documentation_content,
+    layout_config={"bug": True},
 )
-register_url_token_callback(app)         # ?jwt= → token exchange → stores + header links
+register_url_token_callback(app)  # ?jwt= → token exchange → stores + header links
 register_auth_callback(app, main_content=main_content, require_elevated=True)
 ```
 
@@ -108,7 +110,7 @@ All domain-specific Dash/HTML components:
 - `registration_status_table()` is the per-order status table on the Registration sub-tab
 - `queue_pane` and `queue_view()` make up the Queue sub-tab; `queue_action_modal` confirms
   Remove, Stop, Clear and Queue again, and `log_modal` shows a job's log
-- `modal` and `modal2` are the confirmation dialogs shown before a submission
+- `modal` and `registration_modal` are the confirmation dialogs shown before a submission
 - `documentation_content` is rendered in the shell's Documentation tab
 
 The switches are `dbc.Switch` (state prop `value`). Don't use `dash_daq`: the library no
