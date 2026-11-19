@@ -61,13 +61,15 @@ Four library calls do the framework wiring, in `index.py`:
 
 ```python
 app = create_app(title="DraugrUI")
-server = app.server                      # gunicorn target is "index:server"
+server = app.server  # gunicorn target is "index:server"
 
 app.layout = get_static_layout(
-    f"DraugrUI v{app_version}", html.Div(),   # placeholder; real content goes to the auth callback
-    documentation_content, layout_config={"bug": True},
+    f"DraugrUI v{app_version}",
+    html.Div(),  # placeholder; real content goes to the auth callback
+    documentation_content,
+    layout_config={"bug": True},
 )
-register_url_token_callback(app)         # ?jwt= → token exchange → stores + header links
+register_url_token_callback(app)  # ?jwt= → token exchange → stores + header links
 register_auth_callback(app, main_content=main_content, require_elevated=True)
 ```
 

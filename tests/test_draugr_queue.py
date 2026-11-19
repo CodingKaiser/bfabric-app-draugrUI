@@ -63,8 +63,16 @@ def _remote(argv):
 
 def test_submit_quotes_draugr_args_once_for_the_remote_shell(ssh):
     calls = ssh(stdout="7\n")
-    args = ["--bases-mask=-y36n*,I8n*", "--custom-bclconvert-flags=--tiles s_1;--x 2", "--reprocess-orders", "1,2"]
-    assert dq.submit("fgcz-s-023", "/export/local/data/R1", args, "falkonoe", after=[4, 5]) == 7
+    args = [
+        "--bases-mask=-y36n*,I8n*",
+        "--custom-bclconvert-flags=--tiles s_1;--x 2",
+        "--reprocess-orders",
+        "1,2",
+    ]
+    assert (
+        dq.submit("fgcz-s-023", "/export/local/data/R1", args, "falkonoe", after=[4, 5])
+        == 7
+    )
 
     assert calls[0][5] == "illumina@fgcz-s-023"
     remote = _remote(calls[0])
@@ -94,7 +102,12 @@ def test_stop_passes_who_stopped_it(ssh):
     calls = ssh()
     dq.stop("fgcz-s-023", "k4", by="falkonoe")
     remote = _remote(calls[0])
-    assert remote[remote.index("draugr-queue") + 1 :] == ["stop", "k4", "--by", "falkonoe"]
+    assert remote[remote.index("draugr-queue") + 1 :] == [
+        "stop",
+        "k4",
+        "--by",
+        "falkonoe",
+    ]
 
 
 def test_not_running_is_recognised():
@@ -130,7 +143,10 @@ def test_past_jobs_join_history_on_key(state):
     past = {j["key"]: j for j in state["past"]}
     # Still running (k4) is not past; finished and removed jobs are, newest first.
     assert [j["key"] for j in state["past"]] == ["k3", "k2", "k5"]
-    assert past["k2"]["submitted_at"] == "2026-11-17T09:00:00" and past["k2"]["exit_code"] == 0
+    assert (
+        past["k2"]["submitted_at"] == "2026-11-17T09:00:00"
+        and past["k2"]["exit_code"] == 0
+    )
     assert past["k3"]["orders"] == ["5"]
 
 
@@ -148,7 +164,9 @@ def test_find_searches_current_lost_and_past(state):
     assert dq.find(state, "nope") is None
 
 
-@pytest.mark.parametrize("stdout", ["", "Welcome to fgcz-s-023\n{}", '{"server": "fgcz-s-023"}'])
+@pytest.mark.parametrize(
+    "stdout", ["", "Welcome to fgcz-s-023\n{}", '{"server": "fgcz-s-023"}']
+)
 def test_unreadable_status_is_a_queue_error(ssh, stdout):
     # Callers only catch QueueError; anything else would fail the callback.
     ssh(stdout=stdout)

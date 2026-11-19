@@ -48,7 +48,7 @@ def build_draugr_args(
     bases2fastq_flags=None,
     bclconvert_flags=None,
     bases_mask=None,
-    barcode_mismatches=None
+    barcode_mismatches=None,
 ):
     """
     Build draugr's arguments for reprocessing orders of a run.
@@ -72,10 +72,14 @@ def build_draugr_args(
         list[str]: draugr's argv, one element per argument.
     """
     args = [
-        "--login-config", "/home/illumina/bfabric_cred/.bfabricpy.yml",
-        "--analysis-folder", "/export/local/analyses",
-        "--logger-rep", "/srv/GT/analysis/falkonoe/dmx_logs/prod",
-        "--scripts-destination", "/srv/GT/analysis/datasets",
+        "--login-config",
+        "/home/illumina/bfabric_cred/.bfabricpy.yml",
+        "--analysis-folder",
+        "/export/local/analyses",
+        "--logger-rep",
+        "/srv/GT/analysis/falkonoe/dmx_logs/prod",
+        "--scripts-destination",
+        "/srv/GT/analysis/datasets",
     ]
 
     if skip_gstore:
@@ -91,7 +95,9 @@ def build_draugr_args(
     # --flag=value, because a custom flags string starts with '-' and argparse
     # would otherwise read it as the next flag rather than as this flag's value.
     if bases2fastq_flags:
-        args.append("--custom-bases2fastq-flags=" + _format_flag_value(bases2fastq_flags))
+        args.append(
+            "--custom-bases2fastq-flags=" + _format_flag_value(bases2fastq_flags)
+        )
     if bclconvert_flags:
         args.append("--custom-bclconvert-flags=" + _format_flag_value(bclconvert_flags))
     # --bases-mask and --barcode-mismatches are separate top-level flags as of
@@ -104,12 +110,14 @@ def build_draugr_args(
     args += ["--reprocess-orders", ",".join(str(elt) for elt in order_list)]
     return args
 
+
 def check_if_file_exists(ssh_command):
     try:
         subprocess.check_output(ssh_command, shell=True)
         return True
     except subprocess.CalledProcessError:
         return False
+
 
 def registration_order_pattern(order_list):
     """
@@ -124,11 +132,7 @@ def registration_order_pattern(order_list):
     return f"o({'|'.join(orders)})_"
 
 
-def generate_registration_command(
-        order_list,
-        run_name
-):
-
+def generate_registration_command(order_list, run_name):
     """
     Generate the commands that register the orders' datasets in B-Fabric.
 
@@ -150,7 +154,9 @@ def generate_registration_command(
     order_pattern = registration_order_pattern(order_list)
 
     check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{script_name}'"
-    check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{script_name}'"
+    check_file_command_processed = (
+        f"ssh {ssh_login} 'ls {remote_path}/processed/{script_name}'"
+    )
     check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{script_name}'"
 
     in_orig = check_if_file_exists(check_file_command_original)

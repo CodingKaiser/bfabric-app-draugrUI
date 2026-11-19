@@ -57,7 +57,12 @@ _switch_row_style = {
     "justifyContent": "space-between",
     "marginBottom": "8px",
 }
-_icon_style = {"cursor": "help", "color": "#888", "fontSize": "0.8em", "marginLeft": "4px"}
+_icon_style = {
+    "cursor": "help",
+    "color": "#888",
+    "fontSize": "0.8em",
+    "marginLeft": "4px",
+}
 
 
 def _label(text, tip_id):
@@ -101,7 +106,9 @@ illumina_specific_section = _instrument_section(
     "Applies to Illumina runs only; ignored for Element/Aviti.",
     "#ed8b00",
     [
-        dbc.Input(value="", placeholder="Custom bclconvert flags", id="bclconvert-input"),
+        dbc.Input(
+            value="", placeholder="Custom bclconvert flags", id="bclconvert-input"
+        ),
         html.Br(),
         dbc.Input(
             value="",
@@ -138,7 +145,9 @@ element_specific_section = _instrument_section(
     "Applies to Element/Aviti runs only; ignored for Illumina.",
     "#35306e",
     [
-        dbc.Input(value="", placeholder="Custom Bases2fastq flags", id="bases2fastq-input"),
+        dbc.Input(
+            value="", placeholder="Custom Bases2fastq flags", id="bases2fastq-input"
+        ),
     ],
 )
 
@@ -156,7 +165,12 @@ default_sidebar = [
     html.Br(),
     html.P("Advanced Options", className="bf-bold", style={"marginBottom": "4px"}),
     _switch_row("Skip GStore Copy", "tip-gstore", "gstore", on=False),
-    _switch_row("Skip Postprocessing", "tip-skip-postprocessing", "skip-postprocessing", on=False),
+    _switch_row(
+        "Skip Postprocessing",
+        "tip-skip-postprocessing",
+        "skip-postprocessing",
+        on=False,
+    ),
     _switch_row("Skip Demultiplexing", "tip-skip-demux", "skip-demux", on=False),
     html.Div(_label("Run after", "tip-after"), style={"marginBottom": "4px"}),
     # Filled with the jobs queued or running on the run's server.
@@ -195,13 +209,19 @@ def _orders(job):
 
 
 def _parameters(job):
-    return html.Details([
-        html.Summary("show"),
-        html.Pre(
-            shlex.join(job.get("draugr_args") or []),
-            style={"whiteSpace": "pre-wrap", "textAlign": "left", "maxWidth": "40vw"},
-        ),
-    ])
+    return html.Details(
+        [
+            html.Summary("show"),
+            html.Pre(
+                shlex.join(job.get("draugr_args") or []),
+                style={
+                    "whiteSpace": "pre-wrap",
+                    "textAlign": "left",
+                    "maxWidth": "40vw",
+                },
+            ),
+        ]
+    )
 
 
 def _action(label, action, job, danger=False):
@@ -232,7 +252,9 @@ def _table(header, rows):
 
 
 def _row(job, run_folder, cells):
-    style = {"background": "rgba(234, 107, 19, 0.08)"} if job["run"] == run_folder else {}
+    style = (
+        {"background": "rgba(234, 107, 19, 0.08)"} if job["run"] == run_folder else {}
+    )
     return html.Tr([html.Td(cell) for cell in cells], style=style)
 
 
@@ -249,8 +271,14 @@ def _panel(title, body, colour=None):
 def _current_state(job):
     """The state pill, plus the job's place in the queue or when it started."""
     if job["state"] == "running":
-        return [_pill("running", "info"), html.Div(f"since {_when(job.get('started_at'))}", className="bf-muted")]
-    return [_pill("queued", "none"), html.Div(f"#{job['position']} in queue", className="bf-muted")]
+        return [
+            _pill("running", "info"),
+            html.Div(f"since {_when(job.get('started_at'))}", className="bf-muted"),
+        ]
+    return [
+        _pill("queued", "none"),
+        html.Div(f"#{job['position']} in queue", className="bf-muted"),
+    ]
 
 
 def _current_row(job, run_folder):
@@ -268,9 +296,15 @@ def _current_row(job, run_folder):
 
 def _lost_row(job, run_folder):
     if job.get("interrupted"):
-        was = [_pill("interrupted", "fail"), html.Div("may have left partial output", className="bf-muted")]
+        was = [
+            _pill("interrupted", "fail"),
+            html.Div("may have left partial output", className="bf-muted"),
+        ]
     else:
-        was = [_pill("never started", "warn"), html.Div("safe to queue again", className="bf-muted")]
+        was = [
+            _pill("never started", "warn"),
+            html.Div("safe to queue again", className="bf-muted"),
+        ]
     return _row(job, run_folder, [
         job["tsp_id"], was, job["run"], _orders(job), job.get("submitter") or "—",
         _when(job.get("submitted_at")), _parameters(job),
@@ -280,7 +314,10 @@ def _lost_row(job, run_folder):
 
 def _outcome(job):
     if job["event"] == "removed":
-        return [_pill("removed", "none"), html.Div(_when(job.get("removed_at")), className="bf-muted")]
+        return [
+            _pill("removed", "none"),
+            html.Div(_when(job.get("removed_at")), className="bf-muted"),
+        ]
     if draugr_queue.was_stopped(job):
         return [_pill("stopped", "warn"),
                 html.Div(f"by {job['stopped_by']} at {_when(job.get('stopped_at'))}", className="bf-muted")]  # fmt: skip
@@ -386,9 +423,16 @@ def registration_status_table(rows, order_names, dataset_url):
 
     def dataset_cell(row):
         if row["dataset_id"]:
-            return html.A(row["dataset_name"], href=dataset_url(row["dataset_id"]), target="_blank")
+            return html.A(
+                row["dataset_name"],
+                href=dataset_url(row["dataset_id"]),
+                target="_blank",
+            )
         if row["submitted_at"]:
-            return html.Span(f"submitted at {row['submitted_at'].replace('T', ' ')}", className="bf-muted")
+            return html.Span(
+                f"submitted at {row['submitted_at'].replace('T', ' ')}",
+                className="bf-muted",
+            )
         return "—"
 
     return html.Div(className="bf-panel", children=[
@@ -413,159 +457,247 @@ def registration_status_table(rows, order_names, dataset_url):
 
 # ==================== Modals ====================
 
-modal = html.Div([
-    dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Ready to DMX?")),
-        # Filled when the modal opens, with any jobs already queued for this run.
-        dbc.ModalBody("Are you sure you're ready to demux?", id="modal-body"),
-        dbc.ModalFooter(
-            dbc.Button("Yes!", id="close", className="ms-auto", n_clicks=0)
+modal = html.Div(
+    [
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle("Ready to DMX?")),
+                # Filled when the modal opens, with any jobs already queued for this run.
+                dbc.ModalBody("Are you sure you're ready to demux?", id="modal-body"),
+                dbc.ModalFooter(
+                    dbc.Button("Yes!", id="close", className="ms-auto", n_clicks=0)
+                ),
+            ],
+            id="modal",
+            is_open=False,
         ),
-    ], id="modal", is_open=False),
-])
+    ]
+)
 
-registration_modal = html.Div([
-    dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Ready to register?")),
-        dbc.ModalBody("Are you sure you're ready to register in B-Fabric?"),
-        dbc.ModalFooter(
-            dbc.Button("Yes!", id="registration-confirm", className="ms-auto", n_clicks=0)
+registration_modal = html.Div(
+    [
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle("Ready to register?")),
+                dbc.ModalBody("Are you sure you're ready to register in B-Fabric?"),
+                dbc.ModalFooter(
+                    dbc.Button(
+                        "Yes!",
+                        id="registration-confirm",
+                        className="ms-auto",
+                        n_clicks=0,
+                    )
+                ),
+            ],
+            id="registration-modal",
+            is_open=False,
         ),
-    ], id="registration-modal", is_open=False),
-])
+    ]
+)
 
 # Confirms a Remove, Stop, Clear or Queue again on the Queue tab; title, body and
 # confirm label are filled for the action when it opens.
-queue_action_modal = dbc.Modal([
-    dbc.ModalHeader(dbc.ModalTitle(id="queue-action-title")),
-    dbc.ModalBody(id="queue-action-body"),
-    dbc.ModalFooter([
-        dbc.Button("Back", id="queue-action-dismiss", className="bf-btn", n_clicks=0),
-        dbc.Button(id="queue-action-confirm", className="bf-btn bf-btn--danger", n_clicks=0),
-    ]),
-], id="queue-action-modal", is_open=False)
+queue_action_modal = dbc.Modal(
+    [
+        dbc.ModalHeader(dbc.ModalTitle(id="queue-action-title")),
+        dbc.ModalBody(id="queue-action-body"),
+        dbc.ModalFooter(
+            [
+                dbc.Button(
+                    "Back", id="queue-action-dismiss", className="bf-btn", n_clicks=0
+                ),
+                dbc.Button(
+                    id="queue-action-confirm",
+                    className="bf-btn bf-btn--danger",
+                    n_clicks=0,
+                ),
+            ]
+        ),
+    ],
+    id="queue-action-modal",
+    is_open=False,
+)
 
-log_modal = dbc.Modal([
-    dbc.ModalHeader(dbc.ModalTitle(id="log-modal-title")),
-    dbc.ModalBody(html.Pre(id="log-modal-body", style={"whiteSpace": "pre-wrap", "fontSize": "0.8em"})),
-], id="log-modal", is_open=False, size="xl", scrollable=True)
+log_modal = dbc.Modal(
+    [
+        dbc.ModalHeader(dbc.ModalTitle(id="log-modal-title")),
+        dbc.ModalBody(
+            html.Pre(
+                id="log-modal-body",
+                style={"whiteSpace": "pre-wrap", "fontSize": "0.8em"},
+            )
+        ),
+    ],
+    id="log-modal",
+    is_open=False,
+    size="xl",
+    scrollable=True,
+)
 
 
 # ==================== Documentation ====================
 
 documentation_content = [
     html.H2("Welcome to Draugr UI"),
-    html.P([
-        "This app is the user interface for ",
-        html.A("Draugr", href="https://gitlab.bfabric.org/Genomics/draugr", target="_blank"),
-        " (Demultiplexing wRapper And Updated GRiffin)."
-    ]),
+    html.P(
+        [
+            "This app is the user interface for ",
+            html.A(
+                "Draugr",
+                href="https://gitlab.bfabric.org/Genomics/draugr",
+                target="_blank",
+            ),
+            " (Demultiplexing wRapper And Updated GRiffin).",
+        ]
+    ),
     html.Br(),
     html.H4("Developer Info"),
-    html.P([
-        "This app was written for the FGCZ. To report a bug, use the \"Report a Bug\" tab. For anything else, email the developer at",
-        html.A(" falko.noe@fgcz.uzh.ch", href="mailto:falko.noe@fgcz.uzh.ch"),
-    ]),
+    html.P(
+        [
+            'This app was written for the FGCZ. To report a bug, use the "Report a Bug" tab. For anything else, email the developer at',
+            html.A(" falko.noe@fgcz.uzh.ch", href="mailto:falko.noe@fgcz.uzh.ch"),
+        ]
+    ),
     html.Br(),
     html.H4("Draugr / DMX Tab"),
-    html.P([
-        html.B("Select Orders to DMX:"),
-        " the orders you want to demultiplex again.",
-        html.Br(), html.Br(),
-        html.B("Skip GStore Copy:"),
-        " don't copy the results to gstore. Useful when you're not yet sure the settings will work.",
-        html.Br(), html.Br(),
-        html.B("Skip Postprocessing:"),
-        " skip the post-demultiplexing processing steps.",
-        html.Br(), html.Br(),
-        html.B("Skip Demultiplexing:"),
-        " skip the demultiplexing step entirely.",
-        html.Br(), html.Br(),
-        html.B("Run after:"),
-        """ optional. Pick jobs on this run's server that must succeed first. The new job runs draugr
+    html.P(
+        [
+            html.B("Select Orders to DMX:"),
+            " the orders you want to demultiplex again.",
+            html.Br(),
+            html.Br(),
+            html.B("Skip GStore Copy:"),
+            " don't copy the results to gstore. Useful when you're not yet sure the settings will work.",
+            html.Br(),
+            html.Br(),
+            html.B("Skip Postprocessing:"),
+            " skip the post-demultiplexing processing steps.",
+            html.Br(),
+            html.Br(),
+            html.B("Skip Demultiplexing:"),
+            " skip the demultiplexing step entirely.",
+            html.Br(),
+            html.Br(),
+            html.B("Run after:"),
+            """ optional. Pick jobs on this run's server that must succeed first. The new job runs draugr
         only if all of them succeeded; otherwise it is not run and counts as failed itself. For example,
         demultiplex lanes separately with Skip Postprocessing and Skip GStore Copy, then queue the
         delivery of all orders with Skip Demultiplexing to run after them.""",
-        html.Br(), html.Br(),
-        html.B("Disable Wizard:"),
-        " the wizard is Draugr's automatic barcode detection and correction. Turn it off if you're confident the assigned barcodes are correct, or if it creates barcode conflicts while you test new settings.",
-        html.Br(), html.Br(),
-        html.B("Skip RawQC:"),
-        " don't generate the RawQC report.",
-        html.Br(), html.Br(),
-        html.B("Custom bclconvert flags (Illumina-Specific):"),
-        """ custom bcl-convert flags for the standard samples, separated by ';', e.g.
+            html.Br(),
+            html.Br(),
+            html.B("Disable Wizard:"),
+            " the wizard is Draugr's automatic barcode detection and correction. Turn it off if you're confident the assigned barcodes are correct, or if it creates barcode conflicts while you test new settings.",
+            html.Br(),
+            html.Br(),
+            html.B("Skip RawQC:"),
+            " don't generate the RawQC report.",
+            html.Br(),
+            html.Br(),
+            html.B("Custom bclconvert flags (Illumina-Specific):"),
+            """ custom bcl-convert flags for the standard samples, separated by ';', e.g.
         "--tiles s_1_2201+s_1_2202;--num-unknown-barcodes-reported 20". bcl-convert has no command-line
         option for the bases mask or barcode mismatches, and Draugr rejects them here; use the
         Illumina-Specific fields below instead. For all possible flags, see the """,
-        html.A("bcl-convert documentation", href="https://help.dragen.illumina.com/dragen-v4.5/product-guides/dragen-v4.5/bcl-conversion", target="_blank"),
-        html.Br(), html.Br(),
-        html.B("Bases mask (Illumina-Specific):"),
-        """ overrides the computed bases mask. Accepts the comma form "y36n*,I8n*,I8n*,y150n*" or the
+            html.A(
+                "bcl-convert documentation",
+                href="https://help.dragen.illumina.com/dragen-v4.5/product-guides/dragen-v4.5/bcl-conversion",
+                target="_blank",
+            ),
+            html.Br(),
+            html.Br(),
+            html.B("Bases mask (Illumina-Specific):"),
+            """ overrides the computed bases mask. Accepts the comma form "y36n*,I8n*,I8n*,y150n*" or the
         semicolon form "Y36N*;I8N*;I8N*;Y150N*". Give exactly one token per read position, in run order.
         If the token count doesn't match the run, Draugr logs an "Ignoring --bases-mask" warning and falls
         back to the computed mask, so check the log if your mask doesn't seem to apply. Leave it empty to
         use the computed mask.""",
-        html.Br(), html.Br(),
-        html.B("Barcode mismatches (Illumina-Specific):"),
-        """ overrides the number of barcode mismatches allowed, which Draugr otherwise derives from the
+            html.Br(),
+            html.Br(),
+            html.B("Barcode mismatches (Illumina-Specific):"),
+            """ overrides the number of barcode mismatches allowed, which Draugr otherwise derives from the
         barcodes' Hamming distances. Allowed values are 0, 1 and 2; leave it on "Auto" to let Draugr decide.""",
-        html.Br(), html.Br(),
-        html.B("Custom Bases2fastq flags (Element-Specific):"),
-        """ custom bases2fastq flags, separated by ';', e.g. "--i1-cycles 8;--r2-cycles 40". Unlike
+            html.Br(),
+            html.Br(),
+            html.B("Custom Bases2fastq flags (Element-Specific):"),
+            """ custom bases2fastq flags, separated by ';', e.g. "--i1-cycles 8;--r2-cycles 40". Unlike
         bcl-convert, bases2fastq has real settings flags, so masks and mismatch thresholds go here rather
         than in the Illumina-Specific fields, e.g.
         "--settings R1FastqMask,R1:y36n*;--settings I1MismatchThreshold,0". For all possible flags, see the """,
-        html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
-        html.Br(), html.Br(),
-    ], style={"marginLeft": "2vw"}),
-        html.H4("Registration Tab"),
-    html.P([
-        html.B("Select Orders to Register:"),
-        " the orders you want to register in B-Fabric again. After you click Submit and confirm, DraugrUI registers their datasets in B-Fabric, creates the FastQC and FastQScreen reports and updates the order statuses.",
-        html.Br(), html.Br(),
-        html.B("BF registration status:"),
-        " each order on the run has one of these statuses. Ready orders are pre-selected.",
-        html.Br(),
-        html.B("Not demultiplexed:"), " draugr has not produced a dataset for the order on this run yet.",
-        html.Br(),
-        html.B("Ready:"), " demultiplexed, but no dataset is registered in B-Fabric yet.",
-        html.Br(),
-        html.B("Submitted:"), """ submitted from DraugrUI within the last hour, and B-Fabric has no dataset
+            html.A(
+                "bases2fastq documentation",
+                href="https://docs.elembio.io/docs/bases2fastq/",
+                target="_blank",
+            ),
+            html.Br(),
+            html.Br(),
+        ],
+        style={"marginLeft": "2vw"},
+    ),
+    html.H4("Registration Tab"),
+    html.P(
+        [
+            html.B("Select Orders to Register:"),
+            " the orders you want to register in B-Fabric again. After you click Submit and confirm, DraugrUI registers their datasets in B-Fabric, creates the FastQC and FastQScreen reports and updates the order statuses.",
+            html.Br(),
+            html.Br(),
+            html.B("BF registration status:"),
+            " each order on the run has one of these statuses. Ready orders are pre-selected.",
+            html.Br(),
+            html.B("Not demultiplexed:"),
+            " draugr has not produced a dataset for the order on this run yet.",
+            html.Br(),
+            html.B("Ready:"),
+            " demultiplexed, but no dataset is registered in B-Fabric yet.",
+            html.Br(),
+            html.B("Submitted:"),
+            """ submitted from DraugrUI within the last hour, and B-Fabric has no dataset
         yet. Registration takes a few minutes, and submitting again before it lands registers a duplicate dataset.""",
-        html.Br(),
-        html.B("Registered:"), " B-Fabric holds a dataset for the order and this run, linked in the table.",
-        html.Br(),
-        html.B("Demultiplexing:"), " a draugr job for the order, or for every order on the run, is queued or running.",
-        html.Br(), html.Br(),
-    ], style={"marginLeft": "2vw"}),
+            html.Br(),
+            html.B("Registered:"),
+            " B-Fabric holds a dataset for the order and this run, linked in the table.",
+            html.Br(),
+            html.B("Demultiplexing:"),
+            " a draugr job for the order, or for every order on the run, is queued or running.",
+            html.Br(),
+            html.Br(),
+        ],
+        style={"marginLeft": "2vw"},
+    ),
     html.H4("Queue Tab"),
-    html.P([
-        """Submitting on the Draugr / DMX tab queues the run on the instrument server that holds the data;
+    html.P(
+        [
+            """Submitting on the Draugr / DMX tab queues the run on the instrument server that holds the data;
         it does not start draugr straight away. Each server runs one draugr job at a time, because
         demultiplexing needs the whole server, and the next job starts when the previous one finishes.
         The automatic run queued when a sequencing run finishes, and runs queued on the command line,
         wait in the same queue.""",
-        html.Br(), html.Br(),
-        """The Queue tab shows that server's running job, its queued jobs in order, and the jobs that have
+            html.Br(),
+            html.Br(),
+            """The Queue tab shows that server's running job, its queued jobs in order, and the jobs that have
         ended for the run you opened. If another run's job is running, a note above the queue says so,
         since this run's jobs cannot start until it ends. "Parameters" shows the exact draugr arguments
         a job was given, and "Log" its console output, also while it runs. Rows for the run you opened
         are highlighted.""",
-        html.Br(), html.Br(),
-        html.B("Remove:"),
-        " takes a queued job off the queue.",
-        html.Br(), html.Br(),
-        html.B("Stop:"),
-        """ kills the running job, bcl-convert included, wherever it is. The run folder may be left with
+            html.Br(),
+            html.Br(),
+            html.B("Remove:"),
+            " takes a queued job off the queue.",
+            html.Br(),
+            html.Br(),
+            html.B("Stop:"),
+            """ kills the running job, bcl-convert included, wherever it is. The run folder may be left with
         partial output, the run's B-Fabric status stays at demultiplexing, and no failure email is sent.
         Jobs set to run after it are not run, and the next job in the queue starts.""",
-        html.Br(), html.Br(),
-        html.B("Lost jobs:"),
-        """ jobs the server dropped without finishing, usually because it rebooted. One that "never
+            html.Br(),
+            html.Br(),
+            html.B("Lost jobs:"),
+            """ jobs the server dropped without finishing, usually because it rebooted. One that "never
         started" is safe to queue again. One that was "interrupted" was running and may have left partial
         output, so check the run folder before queueing it again. "Queue again" submits the same
         arguments and clears the entry; "Clear" only clears it.""",
-        html.Br(), html.Br(),
-    ], style={"marginLeft": "2vw"}),
+            html.Br(),
+            html.Br(),
+        ],
+        style={"marginLeft": "2vw"},
+    ),
 ]
