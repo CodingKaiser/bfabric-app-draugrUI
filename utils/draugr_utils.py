@@ -111,6 +111,19 @@ def check_if_file_exists(ssh_command):
     except subprocess.CalledProcessError:
         return False
 
+def registration_order_pattern(order_list):
+    """
+    Extended regex matching the script lines of exactly these orders.
+
+    Each order's lines name its datasets o<order>_..., so anchoring on that prefix
+    keeps order 123 from also picking up the lines of order 1234.
+    """
+    orders = [str(elt) for elt in order_list]
+    if not orders or not all(o.isdigit() for o in orders):
+        raise ValueError(f"Order ids must be numeric: {order_list!r}")
+    return f"o({'|'.join(orders)})_"
+
+
 def generate_registration_command(
         order_list,
         run_name
@@ -120,19 +133,25 @@ def generate_registration_command(
     Generate the commands that register the orders' datasets in B-Fabric.
 
     Args:
-        order_list (list): List of order IDs to process.
+        order_list (list): List of numeric order IDs to process.
         run_name (str): Run name.
 
     Returns:
-        str: Command strings for BF registration.
+        tuple: (generate, execute) command strings for BF registration, or
+        (False, False) if the run has no <RUN>_sushification.sh.
+
+    Raises:
+        ValueError: if an order id is not numeric.
     """
 
     ssh_login = "trxcopy@fgcz-h-082"
     remote_path = "/srv/GT/analysis/datasets"
+    script_name = f"{run_name}_sushification.sh"
+    order_pattern = registration_order_pattern(order_list)
 
-    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{run_name}*'"
-    check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{run_name}*'"
-    check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{run_name}*'"
+    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{script_name}'"
+    check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{script_name}'"
+    check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{script_name}'"
 
     in_orig = check_if_file_exists(check_file_command_original)
     in_proc = check_if_file_exists(check_file_command_processed)
@@ -141,14 +160,12 @@ def generate_registration_command(
     if not in_orig and not in_proc and not in_iseq:
         return False, False
 
-    order_string = "|".join([str(elt) for elt in order_list]).replace("|", "\\|")
-
     if in_orig:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     elif in_iseq:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/ISeq/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/ISeq/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     else:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/processed/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
 
     execute_bash_script = f'''ssh {ssh_login} "nohup bash -lc 'cd /srv/sushi/production/master && bash /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
 

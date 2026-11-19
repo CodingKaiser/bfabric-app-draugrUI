@@ -31,7 +31,7 @@ Callback responsibilities:
   - toggle_modal / toggle_modal2 : open/close confirmation dialogs
   - execute_draugr_command      : queue a Draugr run, or fire the BF registration SSH commands
   - toggle_queue_refresh / refresh_queue : the Queue tab's live job list
-  - toggle_queue_action_modal / run_queue_action : remove a queued job; clear or re-queue a lost one
+  - toggle_queue_action_modal / run_queue_action : remove a queued job, stop the running one, clear or re-queue a lost one
   - show_log                    : tail of a job's console output
   - toggle_submit_button / _2   : disable submit when no orders selected
   - reset_form_state            : reset switches/inputs on every page load
@@ -502,7 +502,7 @@ def _banner(message, severity):
     prevent_initial_call=True,
     # draugr-queue queues the same run as often as it is asked to, so a double
     # click on Yes! must not get through as a second submission.
-    running=[(Output("close", "disabled"), True, False)],
+    running=[(Output("close", "disabled"), True, False), (Output("close2", "disabled"), True, False)],
 )
 def execute_draugr_command(
     n_clicks,
@@ -630,12 +630,24 @@ def execute_draugr_command(
         if not orders2:
             return no_orders, no_update, no_update, no_update, no_update
 
+        # The dropdown's value comes from the browser and ends up in a shell
+        # command, so accept only this run's own orders.
+        run_orders = {str(o) for o in (run_data or {}).get("containers", [])}
+        if not {str(o) for o in orders2} <= run_orders:
+            return (
+                _banner("BF registration refused: some selected orders are not in this run.", "error"),
+                no_update,
+                no_update,
+                no_update,
+                no_update,
+            )
+
         try:
             draugr_command1, draugr_command2 = du.generate_registration_command(
                 order_list=orders2, run_name=run_data["name"]
             )
-        except (KeyError, OSError):
-            # No run name in run_data, or the ssh existence check could not run.
+        except (KeyError, OSError, ValueError):
+            # No run name in run_data, a non-numeric order id, or the ssh existence check could not run.
             draugr_command1, draugr_command2 = None, None
 
         if not draugr_command1 or not draugr_command2:
@@ -656,13 +668,29 @@ def execute_draugr_command(
                 no_update,
             )
 
-        os.system(draugr_command1)
+        if os.system(draugr_command1) != 0:
+            L.log_operation(
+                "EXECUTE",
+                "BF registration has FAILED: could not collect the orders' registration commands.",
+                params={"generate_bash_script": draugr_command1},
+                flush_logs=True,
+            )
+            return (
+                _banner(
+                    "BF registration has FAILED: could not collect the orders' registration commands.",
+                    "error",
+                ),
+                no_update,
+                no_update,
+                no_update,
+                no_update,
+            )
         time.sleep(1)
         os.system(draugr_command2)
 
         L.log_operation(
             operation="execute",
-            message="FASTQ execution",
+            message="BF registration submitted",
             params={
                 "generate_bash_script": draugr_command1,
                 "execute_bash_script": draugr_command2,
@@ -673,8 +701,20 @@ def execute_draugr_command(
         try:
             registration_status.record_submission(run_data["name"], orders2, submitter)
         except OSError as e:
-            # Only the Submitted status depends on this; the BF registration itself is underway.
+            # The BF registration itself is underway, but these orders will not show as
+            # Submitted, so warn instead of letting them look Ready for a second submission.
             print(f"Could not record the BF registration submission: {e}")
+            return (
+                _banner(
+                    "BF registration has begun, but it could not be recorded here, so these orders "
+                    "may still show as Ready. Do not submit them again; see B-Fabric for progress.",
+                    "warning",
+                ),
+                no_update,
+                no_update,
+                no_update,
+                no_update,
+            )
 
         return (
             _banner(
