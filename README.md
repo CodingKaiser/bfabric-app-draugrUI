@@ -108,7 +108,7 @@ All domain-specific Dash/HTML components:
 - `registration_status_table()` is the per-order status table on the Registration sub-tab
 - `queue_pane` and `queue_view()` make up the Queue sub-tab; `queue_action_modal` confirms
   Remove, Stop, Clear and Queue again, and `log_modal` shows a job's log
-- `modal` and `modal2` are the confirmation dialogs shown before a submission
+- `modal` and `registration_modal` are the confirmation dialogs shown before a submission
 - `documentation_content` is rendered in the shell's Documentation tab
 
 The switches are `dbc.Switch` (state prop `value`). Don't use `dash_daq`: the library no

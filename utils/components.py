@@ -169,12 +169,12 @@ default_sidebar = [
 ]
 
 registration_sidebar = [
-    html.P("Select Orders to Register", id="sidebar_text2"),
-    dcc.Dropdown([], id="draugr-dropdown-2", multi=True),
+    html.P("Select Orders to Register", id="registration-sidebar-text"),
+    dcc.Dropdown([], id="registration-dropdown", multi=True),
     html.Br(),
     html.Div(
-        id="submit-btn-wrapper-2",
-        children=dbc.Button("Submit", id="draugr-button-2", className="bf-btn"),
+        id="registration-btn-wrapper",
+        children=dbc.Button("Submit", id="registration-button", className="bf-btn"),
     ),
 ]
 
@@ -424,14 +424,14 @@ modal = html.Div([
     ], id="modal", is_open=False),
 ])
 
-modal2 = html.Div([
+registration_modal = html.Div([
     dbc.Modal([
         dbc.ModalHeader(dbc.ModalTitle("Ready to register?")),
         dbc.ModalBody("Are you sure you're ready to register in B-Fabric?"),
         dbc.ModalFooter(
-            dbc.Button("Yes!", id="close2", className="ms-auto", n_clicks=0)
+            dbc.Button("Yes!", id="registration-confirm", className="ms-auto", n_clicks=0)
         ),
-    ], id="modal2", is_open=False),
+    ], id="registration-modal", is_open=False),
 ])
 
 # Confirms a Remove, Stop, Clear or Queue again on the Queue tab; title, body and
