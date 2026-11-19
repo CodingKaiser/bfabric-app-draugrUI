@@ -992,6 +992,9 @@ def show_log(_clicks, run_data):
         lines = draugr_queue.LOG_TAIL_LINES
         return True, f"Log of {_job_label(job)} (last {lines} lines)", draugr_queue.log_tail(server, job["log"], lines)
     except draugr_queue.QueueError as e:
+        if draugr_queue.log_deleted(e):
+            days = draugr_queue.LOG_RETENTION_DAYS
+            return True, "Log deleted", f"draugr deletes job logs after {days} days; this one is gone."
         return True, "Could not read the log", str(e)
 
 

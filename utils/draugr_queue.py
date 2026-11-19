@@ -24,6 +24,8 @@ DRAUGR_DIR = "/export/local/analyses/draugr_exec"
 DATA_DIR = "/export/local/data"
 # How much of a job's console output the Log dialog shows.
 LOG_TAIL_LINES = 200
+# draugr deletes job logs older than this (LOG_RETENTION_DAYS in draugr-queue).
+LOG_RETENTION_DAYS = 60
 
 # What a finished job's exit code means.
 EXIT_CODES = {
@@ -120,6 +122,11 @@ def not_running(error):
 def already_removed(error):
     """Whether a remove was refused only because the job had already been removed."""
     return "has already been removed" in str(error)
+
+
+def log_deleted(error):
+    """Whether a log could not be read only because draugr had deleted it."""
+    return "No such file or directory" in str(error)
 
 
 def log_tail(server, log, lines=LOG_TAIL_LINES):

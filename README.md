@@ -144,7 +144,8 @@ shows that reason to the operator. ssh exits `255` when it cannot connect.
   cleared it after the last refresh, `draugr-queue` refuses ("has already been removed") and the
   app says so instead of showing an error
 - `stop()` kills the running job, draugr and bcl-convert included (`--by <login>`)
-- `log_tail()` returns the end of a job's console output (draugr's stdout/stderr)
+- `log_tail()` returns the end of a job's console output (draugr's stdout/stderr). draugr
+  deletes job logs after 60 days, so for an older job the Log dialog says the log was deleted
 
 Jobs are identified by `key`, because tsp ids restart when the server reboots. The Queue tab,
 the Run after dropdown and the Demultiplexing status only poll the run's own server.

@@ -102,6 +102,14 @@ def test_not_running_is_recognised():
     assert not dq.not_running(dq.QueueError("draugr-queue: no job with key k4"))
 
 
+def test_log_deleted_is_recognised(ssh):
+    ssh(returncode=1, stderr="tail: cannot open '/q/output/ts-out.x' for reading: No such file or directory\n")
+    with pytest.raises(dq.QueueError) as e:
+        dq.log_tail("fgcz-s-023", "/q/output/ts-out.x")
+    assert dq.log_deleted(e.value)
+    assert not dq.log_deleted(dq.QueueError("Could not connect to fgcz-s-023"))
+
+
 def test_already_removed_is_recognised():
     assert dq.already_removed(dq.QueueError("draugr-queue: Job k4 has already been removed"))
     assert not dq.already_removed(dq.QueueError("draugr-queue: Job k4 has already finished"))
