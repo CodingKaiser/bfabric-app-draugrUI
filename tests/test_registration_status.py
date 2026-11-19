@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from utils import sushi_status as ss
+from utils import registration_status as ss
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -18,15 +18,15 @@ def test_demuxed_orders_needs_the_exact_run_name():
     assert ss.demuxed_orders(text, "X57") == set()
 
 
-def test_find_sushi_script_prefers_the_first_folder(tmp_path):
+def test_find_registration_script_prefers_the_first_folder(tmp_path):
     first, second = tmp_path / "a", tmp_path / "b"
     for folder in (first, second):
         folder.mkdir()
         (folder / "X570_sushification.sh").write_text("")
     (second / "X57_sushification.sh").write_text("")
-    assert ss.find_sushi_script("X570", [first, second]) == first / "X570_sushification.sh"
-    assert ss.find_sushi_script("X57", [first, second]) == second / "X57_sushification.sh"
-    assert ss.find_sushi_script("X999", [first, second]) is None
+    assert ss.find_registration_script("X570", [first, second]) == first / "X570_sushification.sh"
+    assert ss.find_registration_script("X57", [first, second]) == second / "X57_sushification.sh"
+    assert ss.find_registration_script("X999", [first, second]) is None
 
 
 def test_matching_dataset_allows_the_sushi_id_suffix():
@@ -55,15 +55,15 @@ def test_derive_statuses_covers_every_state():
         ss.NOT_DEMUXED,
         ss.READY,
         ss.SUBMITTED,
-        ss.SUSHIFIED,
-        ss.DEMUXING,  # an active draugr job outranks an earlier sushification
+        ss.REGISTERED,
+        ss.DEMUXING,  # an active draugr job outranks an earlier BF registration
     ]
     assert rows[3]["dataset_id"] == 70
 
 
 def test_recent_submissions_expire_and_ignore_other_runs(tmp_path):
     now = datetime(2026, 10, 20, 12, 0, 0)
-    folder = tmp_path / "sushify"
+    folder = tmp_path / "registered"
     folder.mkdir()
     for name, run, when, orders in [
         ("X570_a.json", "X570", now - timedelta(minutes=10), ["1"]),

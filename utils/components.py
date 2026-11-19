@@ -1,8 +1,8 @@
 """
 Domain-specific UI components for DraugrUI.
 
-Only contains components unique to the Draugr workflow: lane cards, DMX/Sushi
-sidebars, the draugr queue and sushification status tables, confirmation
+Only contains components unique to the Draugr workflow: lane cards, DMX and
+BF registration sidebars, the draugr queue and BF registration status tables, confirmation
 modals, and documentation.
 The app shell — title bar, entity row, tab bar, notification stack — and the
 generic auth/layout components come from bfabric_web_apps, as do the .bf-*
@@ -19,7 +19,7 @@ import shlex
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-from utils import draugr_queue, sushi_status
+from utils import draugr_queue, registration_status
 
 # ==================== Lane Cards ====================
 
@@ -168,8 +168,8 @@ default_sidebar = [
     ),
 ]
 
-sushi_sidebar = [
-    html.P("Select Orders to Sushify", id="sidebar_text2"),
+registration_sidebar = [
+    html.P("Select Orders to Register", id="sidebar_text2"),
     dcc.Dropdown([], id="draugr-dropdown-2", multi=True),
     html.Br(),
     html.Div(
@@ -367,32 +367,32 @@ queue_pane = html.Div(
 )
 
 
-# ==================== Sushification status ====================
+# ==================== BF registration status ====================
 
-_SUSHI_STATUS_PILL = {
-    sushi_status.SUSHIFIED: "pass",
-    sushi_status.READY: "info",
-    sushi_status.SUBMITTED: "warn",
-    sushi_status.DEMUXING: "info",
-    sushi_status.NOT_DEMUXED: "none",
+_REGISTRATION_STATUS_PILL = {
+    registration_status.REGISTERED: "pass",
+    registration_status.READY: "info",
+    registration_status.SUBMITTED: "warn",
+    registration_status.DEMUXING: "info",
+    registration_status.NOT_DEMUXED: "none",
 }
 
 
 _LEFT = {"textAlign": "left"}  # .bf-stats centres cells
 
 
-def sushi_status_table(rows, order_names, dataset_url):
-    """One row per order: its status and, once sushified, a link to the dataset."""
+def registration_status_table(rows, order_names, dataset_url):
+    """One row per order: its status and, once registered, a link to the dataset."""
 
     def dataset_cell(row):
         if row["dataset_id"]:
             return html.A(row["dataset_name"], href=dataset_url(row["dataset_id"]), target="_blank")
         if row["submitted_at"]:
-            return html.Span(f"sushified at {row['submitted_at'].replace('T', ' ')}", className="bf-muted")
+            return html.Span(f"submitted at {row['submitted_at'].replace('T', ' ')}", className="bf-muted")
         return "—"
 
     return html.Div(className="bf-panel", children=[
-        html.Div("Sushification status", className="bf-panel-header"),
+        html.Div("BF registration status", className="bf-panel-header"),
         html.Div(className="bf-panel-body", children=html.Table(
             [
                 html.Thead(html.Tr([html.Th(h, style=_LEFT) for h in ["Order", "Name", "Status", "Dataset"]])),
@@ -400,7 +400,7 @@ def sushi_status_table(rows, order_names, dataset_url):
                     html.Tr([
                         html.Td(row["order"], style=_LEFT),
                         html.Td(order_names.get(row["order"], ""), style=_LEFT),
-                        html.Td(_pill(row["status"], _SUSHI_STATUS_PILL[row["status"]]), style=_LEFT),
+                        html.Td(_pill(row["status"], _REGISTRATION_STATUS_PILL[row["status"]]), style=_LEFT),
                         html.Td(dataset_cell(row), style=_LEFT),
                     ])
                     for row in rows
@@ -426,8 +426,8 @@ modal = html.Div([
 
 modal2 = html.Div([
     dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Ready to Sushify?")),
-        dbc.ModalBody("Are you sure you're ready to sushify?"),
+        dbc.ModalHeader(dbc.ModalTitle("Ready to register?")),
+        dbc.ModalBody("Are you sure you're ready to register in B-Fabric?"),
         dbc.ModalFooter(
             dbc.Button("Yes!", id="close2", className="ms-auto", n_clicks=0)
         ),
@@ -519,22 +519,22 @@ documentation_content = [
         html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
         html.Br(), html.Br(),
     ], style={"marginLeft": "2vw"}),
-        html.H4("Sushify Tab"),
+        html.H4("Registered Tab"),
     html.P([
-        html.B("Select Orders to Sushify:"),
-        " the orders you want to sushify again. After you click Submit and confirm, DraugrUI asks the Sushi server to create the FastQC and FastQScreen reports and updates the order statuses.",
+        html.B("Select Orders to Register:"),
+        " the orders you want to register in B-Fabric again. After you click Submit and confirm, DraugrUI registers their datasets in B-Fabric, creates the FastQC and FastQScreen reports and updates the order statuses.",
         html.Br(), html.Br(),
-        html.B("Sushification status:"),
+        html.B("BF registration status:"),
         " each order on the run has one of these statuses. Ready orders are pre-selected.",
         html.Br(),
         html.B("Not demultiplexed:"), " draugr has not produced a dataset for the order on this run yet.",
         html.Br(),
         html.B("Ready:"), " demultiplexed, but no dataset is registered in B-Fabric yet.",
         html.Br(),
-        html.B("Submitted:"), """ sushified from DraugrUI within the last hour, and B-Fabric has no dataset
-        yet. Registration takes a few minutes, and sushifying again before it lands registers a duplicate dataset.""",
+        html.B("Submitted:"), """ submitted from DraugrUI within the last hour, and B-Fabric has no dataset
+        yet. Registration takes a few minutes, and submitting again before it lands registers a duplicate dataset.""",
         html.Br(),
-        html.B("Sushified:"), " B-Fabric holds a dataset for the order and this run, linked in the table.",
+        html.B("Registered:"), " B-Fabric holds a dataset for the order and this run, linked in the table.",
         html.Br(),
         html.B("Demultiplexing:"), " a draugr job for the order, or for every order on the run, is queued or running.",
         html.Br(), html.Br(),

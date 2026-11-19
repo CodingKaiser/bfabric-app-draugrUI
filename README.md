@@ -12,8 +12,8 @@ DraugrUI is launched from B-Fabric when a user selects a sequencing run. It:
    draugr job at a time per server, optionally chained after other jobs (`--after`)
 4. Shows that server's queue, lost jobs and history, with parameters and logs, and lets the
    operator remove queued jobs, stop the running one, and re-queue or clear lost ones
-5. Shows each order's sushification status and lets the operator trigger FastQC/FastQScreen
-   reports (Sushi pipeline) once demultiplexing is done
+5. Shows each order's BF registration status and lets the operator register its dataset in
+   B-Fabric, with FastQC/FastQScreen reports, once demultiplexing is done
 
 ## Project structure
 
@@ -23,10 +23,10 @@ bfabric-app-draugrUI/
 ├── utils/
 │   ├── bfabric_utils.py        # Session clients (user / service) and logger from the launch token
 │   ├── components.py           # Domain-specific UI components (lane cards, sidebars, modals)
-│   ├── draugr_utils.py         # draugr argument builder; Sushi SSH command builder
+│   ├── draugr_utils.py         # draugr argument builder; BF registration SSH command builder
 │   ├── run_data.py             # B-Fabric data fetcher: traverses Run → lane → container
 │   ├── draugr_queue.py         # draugr-queue over ssh: submit, status, remove, stop, log
-│   └── sushi_status.py         # Per-order sushification status
+│   └── registration_status.py  # Per-order BF registration status
 ├── tests/                      # pytest unit tests (`uv run pytest`)
 ├── pyproject.toml              # Pinned dependencies (bfabric-web-apps, dash, dash-bootstrap-components)
 ├── deploy.toml                 # Deployment manifest; its `name` fixes the .env prefix (DRAUGRUI_)
@@ -50,11 +50,11 @@ views are sub-tabs of Main:
 | Shell | Documentation | In-app usage guide for all options and flags |
 | Shell | Report a Bug | Submit a bug report (stored as a log entry in B-Fabric) |
 | Main → sub-tab | Draugr / DMX | Configure options and queue a Draugr demultiplexing run |
-| Main → sub-tab | Sushify | Each order's sushification status; trigger FastQC and FastQScreen reports |
+| Main → sub-tab | Registered | Each order's BF registration status; register datasets with FastQC and FastQScreen reports |
 | Main → sub-tab | Queue | The run's server's queue, lost jobs and history, with parameters, logs, Remove and Stop |
 
 Draugr / DMX pairs its options sidebar with the run's lane cards; a lane holding a selected
-order is outlined in the B-Fabric accent colour. Sushify pairs its sidebar with a status
+order is outlined in the B-Fabric accent colour. Registered pairs its sidebar with a status
 table per order. The sidebars stay mounted, so switching sub-tabs does not lose entered values.
 
 Four library calls do the framework wiring, in `index.py`:
@@ -85,9 +85,9 @@ is on Dash 4, where React silently ignores kebab-case style properties.
 ### `index.py`
 The main application file. It creates the app with `bfabric_web_apps.create_app()` and exposes
 `server = app.server` at module level for gunicorn. It builds the Main tab's content (the DMX,
-Sushify and Queue sub-tabs, tooltips and dialogs) and hands it to `register_auth_callback`, which
+Registered and Queue sub-tabs, tooltips and dialogs) and hands it to `register_auth_callback`, which
 shows it only to an authenticated, elevated user. Its callbacks load the run data, fill the
-dropdowns and lane cards, open and close the dialogs, queue Draugr runs and start the Sushi
+dropdowns and lane cards, open and close the dialogs, queue Draugr runs and start the BF registration
 commands, run the Queue tab, enable the submit buttons, reset the form and submit bug reports.
 
 ### `utils/bfabric_utils.py`
@@ -104,8 +104,8 @@ All domain-specific Dash/HTML components:
 - `lane_card()` renders one sequencing lane as a design-system panel
 - `default_sidebar` holds the DMX options: order dropdown, switches (Wizard, Skip flags),
   Illumina- and Element-specific flag inputs, Run after dropdown and submit button
-- `sushi_sidebar` is the order dropdown and submit button of the Sushify sub-tab
-- `sushi_status_table()` is the per-order status table on the Sushify sub-tab
+- `registration_sidebar` is the order dropdown and submit button of the Registered sub-tab
+- `registration_status_table()` is the per-order status table on the Registered sub-tab
 - `queue_pane` and `queue_view()` make up the Queue sub-tab; `queue_action_modal` confirms
   Remove, Stop, Clear and Queue again, and `log_modal` shows a job's log
 - `modal` and `modal2` are the confirmation dialogs shown before a submission
@@ -118,7 +118,7 @@ longer pulls it in.
 - `build_draugr_args()` returns draugr's arguments for the flags selected in the UI, one argv
   element per argument. It leaves out `--run-folder`, which draugr-queue takes itself, and does
   no shell quoting: `draugr_queue` quotes the whole remote command once for the ssh hop.
-- `generate_sushi_command()` checks where the run's dataset file lives on `fgcz-h-082`, then builds two SSH commands: one to `grep` the selected orders into a Sushi bash script and one to execute that script
+- `generate_registration_command()` checks where the run's dataset file lives on `fgcz-h-082`, then builds two SSH commands: one to `grep` the selected orders into a registration bash script and one to execute that script
 
 ### `utils/draugr_queue.py`
 Every draugr run goes through a task spooler (`tsp`) queue with one slot on the instrument
@@ -166,11 +166,11 @@ tsp ids they refer to have restarted.
 `draugr-queue` accepts the same run as often as it is submitted, so the confirm button is
 disabled while a submission is in flight.
 
-### `utils/sushi_status.py`
+### `utils/registration_status.py`
 Each order's status: *Not demultiplexed* (no block in `<RUN>_sushification.sh`), *Ready*,
-*Submitted* (sushified from the app within the last hour and not yet registered; sushifying again
-would register a duplicate), *Sushified* (a dataset for the order and run exists in B-Fabric), or
-*Demultiplexing* (a draugr job for it, or a full run, is queued or running). Sushification is checked in
+*Submitted* (submitted from the app within the last hour and not yet registered; submitting again
+would register a duplicate), *Registered* (a dataset for the order and run exists in B-Fabric), or
+*Demultiplexing* (a draugr job for it, or a full run, is queued or running). BF registration is checked in
 B-Fabric, not by where the script sits, because the script moves itself to `processed/` even
 after a failed block.
 
@@ -253,8 +253,8 @@ The image installs `bfabric-web-apps` from PyPI at the version pinned in the Doc
 commit: it would work locally under `uv` and fail inside the container. `pyproject.toml`
 therefore pins the released `bfabric-web-apps>=0.9.8,<0.11.2` from PyPI, with no git source.
 
-The app queues draugr runs over `ssh illumina@<instrument server>` and starts Sushi over
+The app queues draugr runs over `ssh illumina@<instrument server>` and starts BF registration over
 `ssh trxcopy@fgcz-h-082`. Run it on a host with SSH keys for both and with `/srv/GT` mounted:
-the Sushify tab reads the sushification scripts there and records its submissions in
-`$DRAUGRUI_STATE_DIR/sushify` (default `/srv/GT/analysis/draugrUI`). The Docker image has none
+the Registered tab reads draugr's `<RUN>_sushification.sh` scripts there and records its submissions in
+`$DRAUGRUI_STATE_DIR/registered` (default `/srv/GT/analysis/draugrUI`). The Docker image has none
 of this, so it cannot queue runs as it stands.

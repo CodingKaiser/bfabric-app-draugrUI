@@ -1,21 +1,21 @@
 """
-Sushification status of each order on a run.
+BF registration status of each order on a run.
 
 An order moves through these states:
 
   Not demultiplexed  draugr has not written a block for it into the run's
                      <RUN>_sushification.sh yet
   Ready              the block exists, but no dataset is registered in B-Fabric
-  Submitted          sushified from this app recently and still not registered.
-                     Registration is asynchronous, and sushifying again in the
+  Submitted          submitted from this app recently and still not registered.
+                     Registration is asynchronous, and submitting again in the
                      meantime registers a duplicate dataset
-  Sushified          B-Fabric holds a dataset for the order and the run
+  Registered         B-Fabric holds a dataset for the order and the run
 
 An order with a queued or running draugr job shows as being demultiplexed
 instead, whatever its state before. A job without --reprocess-orders (a full
 automatic run) counts for every order.
 
-Sushification is checked against B-Fabric, not by where the script sits:
+BF registration is checked against B-Fabric, not by where the script sits:
 scripts are left in place after a successful run, and the script's trailing
 `mv <RUN>* processed` runs even when a block failed.
 """
@@ -33,17 +33,17 @@ DATASETS_DIR = Path("/srv/GT/analysis/datasets")
 # Where draugr writes the script (ISeq for QC runs), and where it moves itself.
 SCRIPT_DIRS = [DATASETS_DIR, DATASETS_DIR / "ISeq", DATASETS_DIR / "processed"]
 SUBMITTED_WINDOW = timedelta(hours=1)
-# Where the app notes its sushify submissions, for the Submitted status.
+# Where the app notes its BF registration submissions, for the Submitted status.
 STATE_DIR = Path(os.environ.get("DRAUGRUI_STATE_DIR", "/srv/GT/analysis/draugrUI"))
 
 NOT_DEMUXED = "Not demultiplexed"
 READY = "Ready"
 SUBMITTED = "Submitted"
-SUSHIFIED = "Sushified"
+REGISTERED = "Registered"
 DEMUXING = "Demultiplexing"
 
 
-def find_sushi_script(run_name, dirs=None):
+def find_registration_script(run_name, dirs=None):
     """Path of the run's <RUN>_sushification.sh, or None if draugr has not written one."""
     for folder in dirs or SCRIPT_DIRS:
         path = folder / f"{run_name}_sushification.sh"
@@ -53,7 +53,7 @@ def find_sushi_script(run_name, dirs=None):
 
 
 def demuxed_orders(script_text, run_name):
-    """Order ids that have a dataset block for this run in the sushification script."""
+    """Order ids that have a dataset block for this run in the run's <RUN>_sushification.sh."""
     orders = set()
     for name in re.findall(r"--dataset_name (\S+)", script_text):
         match = re.fullmatch(rf"o(\d+)_.*_{re.escape(run_name)}", name)
@@ -77,8 +77,8 @@ def matching_dataset(datasets, order_id, run_name):
 
 
 def record_submission(run_name, orders, submitter, state_dir=None):
-    """Note that orders were sushified from the app, for the Submitted status."""
-    folder = (state_dir or STATE_DIR) / "sushify"
+    """Note that orders were submitted for BF registration from the app, for the Submitted status."""
+    folder = (state_dir or STATE_DIR) / "registered"
     folder.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     record = {
@@ -91,9 +91,9 @@ def record_submission(run_name, orders, submitter, state_dir=None):
 
 
 def recent_submissions(run_name, now=None, state_dir=None):
-    """Order id -> time it was last sushified from the app, within SUBMITTED_WINDOW."""
+    """Order id -> time it was last submitted for BF registration from the app, within SUBMITTED_WINDOW."""
     now = now or datetime.now()
-    folder = (state_dir or STATE_DIR) / "sushify"
+    folder = (state_dir or STATE_DIR) / "registered"
     submitted = {}
     for path in sorted(folder.glob(f"{run_name}_*.json")):
         try:
@@ -116,9 +116,9 @@ def derive_statuses(orders, run_name, demuxed, datasets_by_order, submissions, d
 
     Args:
         orders: order ids on the run.
-        demuxed: order ids with a block in the sushification script.
+        demuxed: order ids with a block in the run's <RUN>_sushification.sh.
         datasets_by_order: order id -> B-Fabric datasets in that order's container.
-        submissions: order id -> time it was last sushified from the app.
+        submissions: order id -> time it was last submitted for BF registration from the app.
         demuxing: order ids in a queued or running draugr job.
     """
     rows = []
@@ -127,7 +127,7 @@ def derive_statuses(orders, run_name, demuxed, datasets_by_order, submissions, d
         if order in demuxing:
             status = DEMUXING
         elif dataset:
-            status = SUSHIFIED
+            status = REGISTERED
         elif order in submissions:
             status = SUBMITTED
         elif order in demuxed:
@@ -179,7 +179,7 @@ def order_statuses(token_data, run_name, run_folder, orders, queue_state):
     datasets; run_folder is the run's data folder, which names its draugr jobs.
     queue_state is the server's draugr_queue.status(), or None if it could not be read.
     """
-    script = find_sushi_script(run_name)
+    script = find_registration_script(run_name)
     demuxed = demuxed_orders(script.read_text(), run_name) if script else set()
     demuxing = demuxing_orders(queue_state, run_folder, orders) if queue_state else set()
     return derive_statuses(

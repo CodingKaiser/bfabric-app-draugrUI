@@ -6,7 +6,7 @@ Defines the Dash app, layout, and all callbacks. Entry point when run directly.
 The layout is the library's app shell (`get_static_layout`): dark app-name bar,
 notification banner stack, entity row, and a horizontal tab bar with Main,
 Documentation and Report a Bug. The app only supplies the Main tab's content —
-three sub-tabs: Draugr/DMX and Sushify, each pairing an options sidebar with the
+three sub-tabs: Draugr/DMX and Registered, each pairing an options sidebar with the
 run's lanes or orders, and Queue, the draugr queue of the run's server. The shell's tab
 bar has no slot for a further app tab, so the workflows are sub-tabs of Main
 rather than tabs of the shell.
@@ -26,10 +26,10 @@ Callback responsibilities:
   - load_run_data               : traverse the run's lanes/orders once per session
   - update_dmx_dropdown         : populate the DMX order dropdown
   - update_lane_display         : render lane cards from run data
-  - update_sushi_status         : per-order sushification status, Sushify dropdown
+  - update_registration_status  : per-order BF registration status, Registered dropdown
   - update_after_dropdown       : the server's queued/running jobs, for Run after
   - toggle_modal / toggle_modal2 : open/close confirmation dialogs
-  - execute_draugr_command      : queue a Draugr run, or fire the Sushi SSH commands
+  - execute_draugr_command      : queue a Draugr run, or fire the BF registration SSH commands
   - toggle_queue_refresh / refresh_queue : the Queue tab's live job list
   - toggle_queue_action_modal / run_queue_action : remove a queued job; clear or re-queue a lost one
   - show_log                    : tail of a job's console output
@@ -56,7 +56,7 @@ from bfabric_web_apps import (
 from dash import ALL, Input, Output, State, dcc, html, no_update
 from dash import callback_context as ctx
 
-from utils import draugr_queue, sushi_status
+from utils import draugr_queue, registration_status
 from utils import draugr_utils as du
 from utils.bfabric_utils import as_token_data, get_logger
 from utils.components import (
@@ -69,8 +69,8 @@ from utils.components import (
     queue_action_modal,
     queue_pane,
     queue_view,
-    sushi_sidebar,
-    sushi_status_table,
+    registration_sidebar,
+    registration_status_table,
 )
 from utils.run_data import fetch_run_entity_data
 
@@ -123,9 +123,9 @@ main_content = html.Div(
     [
         dcc.Store(id="run_data", storage_type="session"),
         # Bumped after a submission or a queue action, so the queue and the
-        # sushification status refresh straight away instead of on their timers.
+        # BF registration status refresh straight away instead of on their timers.
         dcc.Store(id="queue-version", data=0),
-        dcc.Store(id="sushi-version", data=0),
+        dcc.Store(id="registration-version", data=0),
         # Tooltips (switch labels — target the ⓘ icon IDs)
         dbc.Tooltip(
             "Disable the demultiplexing Wizard. None of the samples are tested for "
@@ -198,12 +198,12 @@ main_content = html.Div(
                 ),
                 dbc.Tab(
                     _work_pane(
-                        sushi_sidebar,
-                        "sushi-status-display",
-                        "Querying B-Fabric for the orders' sushification status…",
+                        registration_sidebar,
+                        "registration-status-display",
+                        "Querying B-Fabric for the orders' BF registration status…",
                     ),
-                    label="Sushify",
-                    tab_id="sushify",
+                    label="Registered",
+                    tab_id="registered",
                 ),
                 dbc.Tab(queue_pane, label="Queue", tab_id="queue"),
             ],
@@ -340,25 +340,25 @@ def update_lane_display(run_data, selected_orders):
     )
 
 
-# --- Sushification status ---
+# --- BF registration status ---
 
 
 @app.callback(
     [
-        Output("sushi-status-display", "children"),
+        Output("registration-status-display", "children"),
         Output("draugr-dropdown-2", "options"),
         Output("draugr-dropdown-2", "value"),
     ],
     [
         Input("run_data", "data"),
-        Input("sushi-version", "data"),
+        Input("registration-version", "data"),
         Input("work-tabs", "active_tab"),
     ],
     State("token_data", "data"),
 )
-def update_sushi_status(run_data, _version, active_tab, token_data):
+def update_registration_status(run_data, _version, active_tab, token_data):
     """
-    Each order's sushification status, and the Sushify dropdown labelled with it.
+    Each order's BF registration status, and the Registered dropdown labelled with it.
 
     Statuses change as draugr runs finish, so they are re-read whenever the tab
     is opened. The outstanding (Ready) orders are only pre-selected on page load
@@ -367,7 +367,7 @@ def update_sushi_status(run_data, _version, active_tab, token_data):
     if not run_data or not token_data:
         return [], [], None
     switched_tab = ctx.triggered_id == "work-tabs"
-    if switched_tab and active_tab != "sushify":
+    if switched_tab and active_tab != "registered":
         return no_update, no_update, no_update
 
     orders = run_data.get("containers", [])
@@ -377,13 +377,13 @@ def update_sushi_status(run_data, _version, active_tab, token_data):
         # Without the queue only the Demultiplexing status is missing.
         queue_state = None
     try:
-        rows = sushi_status.order_statuses(
+        rows = registration_status.order_statuses(
             token_data, run_data["name"], run_data["datafolder"], orders, queue_state
         )
     except Exception as e:  # noqa: BLE001 — any B-Fabric/OAuth failure, see below
-        # An expired OAuth session raises here; the orders can still be sushified.
+        # An expired OAuth session raises here; the orders can still be registered.
         return (
-            make_banner(f"Could not load the sushification status: {e}", "error"),
+            make_banner(f"Could not load the BF registration status: {e}", "error"),
             [{"label": o, "value": str(o)} for o in orders],
             no_update,
         )
@@ -394,9 +394,9 @@ def update_sushi_status(run_data, _version, active_tab, token_data):
         {"label": f"{r['order']} {names.get(r['order'], '')} — {r['status']}", "value": r["order"]}
         for r in rows
     ]
-    ready = [r["order"] for r in rows if r["status"] == sushi_status.READY]
+    ready = [r["order"] for r in rows if r["status"] == registration_status.READY]
     return (
-        sushi_status_table(rows, names, lambda i: f"{base_url}/dataset/show.html?id={i}"),
+        registration_status_table(rows, names, lambda i: f"{base_url}/dataset/show.html?id={i}"),
         options,
         no_update if switched_tab else ready,
     )
@@ -474,7 +474,7 @@ def _banner(message, severity):
         Output("bf-notification", "children"),
         Output("work-tabs", "active_tab"),
         Output("queue-version", "data"),
-        Output("sushi-version", "data"),
+        Output("registration-version", "data"),
         Output("after-dropdown", "value"),
     ],
     [
@@ -497,7 +497,7 @@ def _banner(message, severity):
         State("run_data", "data"),
         State("draugr-dropdown-2", "value"),
         State("queue-version", "data"),
-        State("sushi-version", "data"),
+        State("registration-version", "data"),
     ],
     prevent_initial_call=True,
     # draugr-queue queues the same run as often as it is asked to, so a double
@@ -522,7 +522,7 @@ def execute_draugr_command(
     run_data,
     orders2,
     queue_version,
-    sushi_version,
+    registration_version,
 ):
 
     button_clicked = ctx.triggered_id
@@ -631,7 +631,7 @@ def execute_draugr_command(
             return no_orders, no_update, no_update, no_update, no_update
 
         try:
-            draugr_command1, draugr_command2 = du.generate_sushi_command(
+            draugr_command1, draugr_command2 = du.generate_registration_command(
                 order_list=orders2, run_name=run_data["name"]
             )
         except (KeyError, OSError):
@@ -641,13 +641,13 @@ def execute_draugr_command(
         if not draugr_command1 or not draugr_command2:
             L.log_operation(
                 "EXECUTE",
-                "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
+                "BF registration has FAILED! Please try DMX again, and then try registering again.",
                 params=None,
                 flush_logs=True,
             )
             return (
                 _banner(
-                    "Sushification has FAILED! Please try DMX again, and then try Sushi again.",
+                    "BF registration has FAILED! Please try DMX again, and then try registering again.",
                     "error",
                 ),
                 no_update,
@@ -671,20 +671,20 @@ def execute_draugr_command(
         )
 
         try:
-            sushi_status.record_submission(run_data["name"], orders2, submitter)
+            registration_status.record_submission(run_data["name"], orders2, submitter)
         except OSError as e:
-            # Only the Submitted status depends on this; the sushification itself is underway.
-            print(f"Could not record the sushify submission: {e}")
+            # Only the Submitted status depends on this; the BF registration itself is underway.
+            print(f"Could not record the BF registration submission: {e}")
 
         return (
             _banner(
-                "Sushification has begun! Please close this window now, and see Sushi for "
+                "BF registration has begun! Please close this window now, and see B-Fabric for "
                 "further status updates and logs.",
                 "info",
             ),
             no_update,
             no_update,
-            (sushi_version or 0) + 1,
+            (registration_version or 0) + 1,
             no_update,
         )
 
@@ -988,8 +988,8 @@ def reset_form_state(_token_data):
     """Force switch/input props to defaults on every page load.
 
     Overrides browser form-state restoration, which can cause the visual state
-    of the switches to differ from Dash's internal state. The Sushify dropdown
-    is not reset here: update_sushi_status pre-selects its outstanding orders.
+    of the switches to differ from Dash's internal state. The Registered dropdown
+    is not reset here: update_registration_status pre-selects its outstanding orders.
     """
     return False, True, False, False, False, "", "", "", "", None
 

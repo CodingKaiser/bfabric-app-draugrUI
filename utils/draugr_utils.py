@@ -1,8 +1,8 @@
 """
-Command builders for the Draugr and Sushi pipelines.
+Command builders for Draugr and BF registration.
 
 Neither builder runs the commands it builds: build_draugr_args() runs nothing,
-and generate_sushi_command() only runs ssh ls checks (check_if_file_exists())
+and generate_registration_command() only runs ssh ls checks (check_if_file_exists())
 and returns its two commands for the caller to run.
 
   build_draugr_args()        — builds draugr's own arguments for a run. They are
@@ -10,14 +10,14 @@ and returns its two commands for the caller to run.
                                 utils/draugr_queue.py), which quotes them once
                                 for the ssh hop.
 
-  generate_sushi_command()   — locates the run's dataset file on fgcz-h-082,
+  generate_registration_command()   — locates the run's dataset file on fgcz-h-082,
                                 then returns two commands: one to grep the selected
-                                order IDs into a Sushi bash script, and one to
+                                order IDs into a registration bash script, and one to
                                 execute that script via nohup.
 
   check_if_file_exists()     — helper that runs an SSH ls via subprocess and
                                 returns True/False; used internally by
-                                generate_sushi_command() to find the dataset file.
+                                generate_registration_command() to find the dataset file.
 """
 
 import subprocess
@@ -111,20 +111,20 @@ def check_if_file_exists(ssh_command):
     except subprocess.CalledProcessError:
         return False
 
-def generate_sushi_command(
+def generate_registration_command(
         order_list,
         run_name
 ):
 
     """
-    Generate a command string for the Sushi pipeline.
+    Generate the commands that register the orders' datasets in B-Fabric.
 
     Args:
         order_list (list): List of order IDs to process.
         run_name (str): Run name.
 
     Returns:
-        str: Command string for the Sushi pipeline.
+        str: Command strings for BF registration.
     """
 
     ssh_login = "trxcopy@fgcz-h-082"
