@@ -50,11 +50,11 @@ views are sub-tabs of Main:
 | Shell | Documentation | In-app usage guide for all options and flags |
 | Shell | Report a Bug | Submit a bug report (stored as a log entry in B-Fabric) |
 | Main → sub-tab | Draugr / DMX | Configure options and queue a Draugr demultiplexing run |
-| Main → sub-tab | Registered | Each order's BF registration status; register datasets with FastQC and FastQScreen reports |
+| Main → sub-tab | Registration | Each order's BF registration status; register datasets with FastQC and FastQScreen reports |
 | Main → sub-tab | Queue | The run's server's queue, lost jobs and history, with parameters, logs, Remove and Stop |
 
 Draugr / DMX pairs its options sidebar with the run's lane cards; a lane holding a selected
-order is outlined in the B-Fabric accent colour. Registered pairs its sidebar with a status
+order is outlined in the B-Fabric accent colour. Registration pairs its sidebar with a status
 table per order. The sidebars stay mounted, so switching sub-tabs does not lose entered values.
 
 Four library calls do the framework wiring, in `index.py`:
@@ -85,7 +85,7 @@ is on Dash 4, where React silently ignores kebab-case style properties.
 ### `index.py`
 The main application file. It creates the app with `bfabric_web_apps.create_app()` and exposes
 `server = app.server` at module level for gunicorn. It builds the Main tab's content (the DMX,
-Registered and Queue sub-tabs, tooltips and dialogs) and hands it to `register_auth_callback`, which
+Registration and Queue sub-tabs, tooltips and dialogs) and hands it to `register_auth_callback`, which
 shows it only to an authenticated, elevated user. Its callbacks load the run data, fill the
 dropdowns and lane cards, open and close the dialogs, queue Draugr runs and start the BF registration
 commands, run the Queue tab, enable the submit buttons, reset the form and submit bug reports.
@@ -104,8 +104,8 @@ All domain-specific Dash/HTML components:
 - `lane_card()` renders one sequencing lane as a design-system panel
 - `default_sidebar` holds the DMX options: order dropdown, switches (Wizard, Skip flags),
   Illumina- and Element-specific flag inputs, Run after dropdown and submit button
-- `registration_sidebar` is the order dropdown and submit button of the Registered sub-tab
-- `registration_status_table()` is the per-order status table on the Registered sub-tab
+- `registration_sidebar` is the order dropdown and submit button of the Registration sub-tab
+- `registration_status_table()` is the per-order status table on the Registration sub-tab
 - `queue_pane` and `queue_view()` make up the Queue sub-tab; `queue_action_modal` confirms
   Remove, Stop, Clear and Queue again, and `log_modal` shows a job's log
 - `modal` and `modal2` are the confirmation dialogs shown before a submission
@@ -255,6 +255,6 @@ therefore pins the released `bfabric-web-apps>=0.9.8,<0.11.2` from PyPI, with no
 
 The app queues draugr runs over `ssh illumina@<instrument server>` and starts BF registration over
 `ssh trxcopy@fgcz-h-082`. Run it on a host with SSH keys for both and with `/srv/GT` mounted:
-the Registered tab reads draugr's `<RUN>_sushification.sh` scripts there and records its submissions in
+the Registration tab reads draugr's `<RUN>_sushification.sh` scripts there and records its submissions in
 `$DRAUGRUI_STATE_DIR/registered` (default `/srv/GT/analysis/draugrUI`). The Docker image has none
 of this, so it cannot queue runs as it stands.

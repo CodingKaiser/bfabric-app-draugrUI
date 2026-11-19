@@ -6,7 +6,7 @@ Defines the Dash app, layout, and all callbacks. Entry point when run directly.
 The layout is the library's app shell (`get_static_layout`): dark app-name bar,
 notification banner stack, entity row, and a horizontal tab bar with Main,
 Documentation and Report a Bug. The app only supplies the Main tab's content —
-three sub-tabs: Draugr/DMX and Registered, each pairing an options sidebar with the
+three sub-tabs: Draugr/DMX and Registration, each pairing an options sidebar with the
 run's lanes or orders, and Queue, the draugr queue of the run's server. The shell's tab
 bar has no slot for a further app tab, so the workflows are sub-tabs of Main
 rather than tabs of the shell.
@@ -26,7 +26,7 @@ Callback responsibilities:
   - load_run_data               : traverse the run's lanes/orders once per session
   - update_dmx_dropdown         : populate the DMX order dropdown
   - update_lane_display         : render lane cards from run data
-  - update_registration_status  : per-order BF registration status, Registered dropdown
+  - update_registration_status  : per-order BF registration status, Registration dropdown
   - update_after_dropdown       : the server's queued/running jobs, for Run after
   - toggle_modal / toggle_modal2 : open/close confirmation dialogs
   - execute_draugr_command      : queue a Draugr run, or fire the BF registration SSH commands
@@ -202,8 +202,8 @@ main_content = html.Div(
                         "registration-status-display",
                         "Querying B-Fabric for the orders' BF registration status…",
                     ),
-                    label="Registered",
-                    tab_id="registered",
+                    label="Registration",
+                    tab_id="registration",
                 ),
                 dbc.Tab(queue_pane, label="Queue", tab_id="queue"),
             ],
@@ -358,7 +358,7 @@ def update_lane_display(run_data, selected_orders):
 )
 def update_registration_status(run_data, _version, active_tab, token_data):
     """
-    Each order's BF registration status, and the Registered dropdown labelled with it.
+    Each order's BF registration status, and the Registration dropdown labelled with it.
 
     Statuses change as draugr runs finish, so they are re-read whenever the tab
     is opened. The outstanding (Ready) orders are only pre-selected on page load
@@ -367,7 +367,7 @@ def update_registration_status(run_data, _version, active_tab, token_data):
     if not run_data or not token_data:
         return [], [], None
     switched_tab = ctx.triggered_id == "work-tabs"
-    if switched_tab and active_tab != "registered":
+    if switched_tab and active_tab != "registration":
         return no_update, no_update, no_update
 
     orders = run_data.get("containers", [])
@@ -988,7 +988,7 @@ def reset_form_state(_token_data):
     """Force switch/input props to defaults on every page load.
 
     Overrides browser form-state restoration, which can cause the visual state
-    of the switches to differ from Dash's internal state. The Registered dropdown
+    of the switches to differ from Dash's internal state. The Registration dropdown
     is not reset here: update_registration_status pre-selects its outstanding orders.
     """
     return False, True, False, False, False, "", "", "", "", None

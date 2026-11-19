@@ -519,7 +519,7 @@ documentation_content = [
         html.A("bases2fastq documentation", href="https://docs.elembio.io/docs/bases2fastq/", target="_blank"),
         html.Br(), html.Br(),
     ], style={"marginLeft": "2vw"}),
-        html.H4("Registered Tab"),
+        html.H4("Registration Tab"),
     html.P([
         html.B("Select Orders to Register:"),
         " the orders you want to register in B-Fabric again. After you click Submit and confirm, DraugrUI registers their datasets in B-Fabric, creates the FastQC and FastQScreen reports and updates the order statuses.",
