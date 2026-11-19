@@ -1,53 +1,44 @@
 """
-SSH command builders for the Draugr and Sushi pipelines.
+Command builders for Draugr and BF registration.
 
-Neither function executes anything directly — both return shell command strings
-that the caller passes to os.system().
+Neither builder runs the commands it builds: build_draugr_args() runs nothing,
+and generate_registration_command() only runs ssh ls checks (check_if_file_exists())
+and returns its two commands for the caller to run.
 
-  generate_draugr_command()  — builds the full SSH + nohup call to start Draugr
-                                on the sequencing server (illumina@<server>),
-                                loading required modules and activating conda first.
+  build_draugr_args()        — builds draugr's own arguments for a run. They are
+                                queued with draugr-queue on the run's server (see
+                                utils/draugr_queue.py), which quotes them once
+                                for the ssh hop.
 
-  generate_sushi_command()   — locates the run's dataset file on fgcz-h-082,
+  generate_registration_command()   — locates the run's dataset file on fgcz-h-082,
                                 then returns two commands: one to grep the selected
-                                order IDs into a Sushi bash script, and one to
+                                order IDs into a registration bash script, and one to
                                 execute that script via nohup.
 
   check_if_file_exists()     — helper that runs an SSH ls via subprocess and
                                 returns True/False; used internally by
-                                generate_sushi_command() to find the dataset file.
+                                generate_registration_command() to find the dataset file.
 """
 
-import shlex
 import subprocess
 
 
 def _format_flag_value(value):
     """
-    Prepare a user-supplied custom flag string for the remote shell.
+    Strip one layer of quotes a user wrapped around a custom flag value.
 
     Users often wrap their input in quotes (the documentation shows quoted
-    examples), which previously ended up as literal quote characters inside the
-    argument value. Strip one layer of surrounding quotes, then quote the result
-    for the remote shell that receives the SSH payload.
-
-    The caller embeds the finished command inside a single-quoted ssh argument,
-    so the quotes shlex.quote() adds would otherwise close that outer quote and
-    let the local shell interpret the value. Values legitimately contain ';'
-    (the bases mask and custom flag separators), which would then be read as a
-    command separator, so the embedded single quotes are escaped for the extra
-    level of nesting.
+    examples), which would otherwise end up as literal quote characters inside
+    the argument value. No shell quoting happens here: the value travels as one
+    argv element, and utils/draugr_queue.py quotes it for the server's shell.
     """
     stripped = value.strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
         stripped = stripped[1:-1].strip()
+    return stripped
 
-    return shlex.quote(stripped).replace("'", "'\\''")
 
-
-def generate_draugr_command(
-    server,
-    run_folder,
+def build_draugr_args(
     order_list,
     skip_gstore=False,
     skip_postprocessing=False,
@@ -60,11 +51,12 @@ def generate_draugr_command(
     barcode_mismatches=None
 ):
     """
-    Generate a command string for the Draugr pipeline.
+    Build draugr's arguments for reprocessing orders of a run.
+
+    The run folder is not among them: draugr-queue takes it as its own
+    --run-folder and refuses it among draugr's arguments.
 
     Args:
-        server (str): Server location
-        run_folder (str): Run folder name.
         order_list (list): List of order IDs to process.
         skip_gstore (bool): Skip the Gstore copy step.
         skip_postprocessing (bool): Skip post-demultiplexing processing.
@@ -77,47 +69,40 @@ def generate_draugr_command(
         barcode_mismatches (str): Illumina-only barcode mismatch override, "0"/"1"/"2".
 
     Returns:
-        str: Command string for the Draugr pipeline.
+        list[str]: draugr's argv, one element per argument.
     """
-    uv_prefix = "uv run --directory /export/local/analyses/draugr_exec"
-    draugr_command = f"{uv_prefix} draugr.py --login-config /home/illumina/bfabric_cred/.bfabricpy.yml --run-folder /export/local/data/{run_folder} --analysis-folder /export/local/analyses --logger-rep /srv/GT/analysis/falkonoe/dmx_logs/prod --scripts-destination /srv/GT/analysis/datasets"
+    args = [
+        "--login-config", "/home/illumina/bfabric_cred/.bfabricpy.yml",
+        "--analysis-folder", "/export/local/analyses",
+        "--logger-rep", "/srv/GT/analysis/falkonoe/dmx_logs/prod",
+        "--scripts-destination", "/srv/GT/analysis/datasets",
+    ]
 
     if skip_gstore:
-        draugr_command += " --skip-gstore-copy"
+        args.append("--skip-gstore-copy")
     if skip_postprocessing:
-        draugr_command += " --skip-post-demux"
+        args.append("--skip-post-demux")
     if skip_demux:
-        draugr_command += " --skip-demux"
+        args.append("--skip-demux")
     if disable_wizard:
-        draugr_command += " --disable-wizard"
+        args.append("--disable-wizard")
     if skip_raw_qc:
-        draugr_command += " -xq"
+        args.append("-xq")
+    # --flag=value, because a custom flags string starts with '-' and argparse
+    # would otherwise read it as the next flag rather than as this flag's value.
     if bases2fastq_flags:
-        draugr_command += " --custom-bases2fastq-flags " + _format_flag_value(bases2fastq_flags)
+        args.append("--custom-bases2fastq-flags=" + _format_flag_value(bases2fastq_flags))
     if bclconvert_flags:
-        draugr_command += " --custom-bclconvert-flags " + _format_flag_value(bclconvert_flags)
+        args.append("--custom-bclconvert-flags=" + _format_flag_value(bclconvert_flags))
     # --bases-mask and --barcode-mismatches are separate top-level flags as of
-    # draugr v2.8.0. Use --flag=value: the mask can legitimately start with '-',
-    # and the space form would make argparse read it as the next flag.
+    # draugr v2.8.0. Same --flag=value form: the mask can legitimately start with '-'.
     if bases_mask:
-        draugr_command += " --bases-mask=" + _format_flag_value(bases_mask)
+        args.append("--bases-mask=" + _format_flag_value(bases_mask))
     if barcode_mismatches:
-        draugr_command += " --barcode-mismatches=" + _format_flag_value(barcode_mismatches)
+        args.append("--barcode-mismatches=" + _format_flag_value(barcode_mismatches))
 
-    draugr_command += " --reprocess-orders " + ",".join([str(elt) for elt in order_list])
-
-    set_environ = "ulimit -n $(ulimit -Hn) && export OPENBLAS_NUM_THREADS=1 && export OPENBLAS_MAIN_FREE=1 &&"
-    lmod_setup = "source /usr/local/ngseq/etc/lmod_profile && export MODULEPATH=/usr/local/ngseq/etc/modules &&"
-    module_load = "module load Tools/bcl2fastq Tools/Bases2Fastq Tools/bclconvert Dev/uv Tools/Quarto"
-    prefix = f"{set_environ} {lmod_setup} {module_load}"
-
-    system_call = f"ssh illumina@{server} '{prefix} && nohup {draugr_command} &> /export/local/data/draugrUI/output.log &' &> output.log"
-
-    # change to just operation get executed
-    # params empty
-    # add the string we send to the server.   
-
-    return system_call
+    args += ["--reprocess-orders", ",".join(str(elt) for elt in order_list)]
+    return args
 
 def check_if_file_exists(ssh_command):
     try:
@@ -126,28 +111,47 @@ def check_if_file_exists(ssh_command):
     except subprocess.CalledProcessError:
         return False
 
-def generate_sushi_command(
+def registration_order_pattern(order_list):
+    """
+    Extended regex matching the script lines of exactly these orders.
+
+    Each order's lines name its datasets o<order>_..., so anchoring on that prefix
+    keeps order 123 from also picking up the lines of order 1234.
+    """
+    orders = [str(elt) for elt in order_list]
+    if not orders or not all(o.isdigit() for o in orders):
+        raise ValueError(f"Order ids must be numeric: {order_list!r}")
+    return f"o({'|'.join(orders)})_"
+
+
+def generate_registration_command(
         order_list,
         run_name
 ):
 
     """
-    Generate a command string for the Sushi pipeline.
+    Generate the commands that register the orders' datasets in B-Fabric.
 
     Args:
-        order_list (list): List of order IDs to process.
+        order_list (list): List of numeric order IDs to process.
         run_name (str): Run name.
 
     Returns:
-        str: Command string for the Sushi pipeline.
+        tuple: (generate, execute) command strings for BF registration, or
+        (False, False) if the run has no <RUN>_sushification.sh.
+
+    Raises:
+        ValueError: if an order id is not numeric.
     """
 
     ssh_login = "trxcopy@fgcz-h-082"
     remote_path = "/srv/GT/analysis/datasets"
+    script_name = f"{run_name}_sushification.sh"
+    order_pattern = registration_order_pattern(order_list)
 
-    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{run_name}*'"
-    check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{run_name}*'"
-    check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{run_name}*'"
+    check_file_command_original = f"ssh {ssh_login} 'ls {remote_path}/{script_name}'"
+    check_file_command_processed = f"ssh {ssh_login} 'ls {remote_path}/processed/{script_name}'"
+    check_file_command_iseq = f"ssh {ssh_login} 'ls {remote_path}/ISeq/{script_name}'"
 
     in_orig = check_if_file_exists(check_file_command_original)
     in_proc = check_if_file_exists(check_file_command_processed)
@@ -156,14 +160,12 @@ def generate_sushi_command(
     if not in_orig and not in_proc and not in_iseq:
         return False, False
 
-    order_string = "|".join([str(elt) for elt in order_list]).replace("|", "\\|")
-
     if in_orig:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     elif in_iseq:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/ISeq/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/ISeq/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
     else:
-        generate_bash_script = f'''ssh {ssh_login} "grep '{order_string}' /srv/GT/analysis/datasets/processed/{run_name}* | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
+        generate_bash_script = f'''ssh {ssh_login} "grep -E '{order_pattern}' /srv/GT/analysis/datasets/processed/{script_name} | uniq -u > /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh"'''
 
     execute_bash_script = f'''ssh {ssh_login} "nohup bash -lc 'cd /srv/sushi/production/master && bash /srv/GT/analysis/datasets/draugrUI/{run_name}_orders.sh &> /srv/GT/analysis/datasets/draugrUI/output.log &' &> output.log"'''
 
