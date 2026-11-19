@@ -77,7 +77,7 @@ def test_submit_quotes_draugr_args_once_for_the_remote_shell(ssh):
     assert calls[0][5] == "illumina@fgcz-s-023"
     remote = _remote(calls[0])
     assert remote[: remote.index("draugr-queue")] == [
-        dq.UV, "run", "--frozen", "--directory", dq.DRAUGR_DIR,
+        dq.UV, "run", "--frozen", "--no-sync", "--directory", dq.DRAUGR_DIR,
     ]  # fmt: skip
     assert remote[remote.index("draugr-queue") + 1 : remote.index("--")] == [
         "submit", "--run-folder", "/export/local/data/R1", "--source", "ui", "--submitter", "falkonoe",
@@ -113,6 +113,33 @@ def test_stop_passes_who_stopped_it(ssh):
 def test_not_running_is_recognised():
     assert dq.not_running(dq.QueueError("draugr-queue: job k4 is not running"))
     assert not dq.not_running(dq.QueueError("draugr-queue: no job with key k4"))
+
+
+def test_log_deleted_is_recognised(ssh):
+    ssh(
+        returncode=1,
+        stderr="tail: cannot open '/q/output/ts-out.x' for reading: No such file or directory\n",
+    )
+    with pytest.raises(dq.QueueError) as e:
+        dq.log_tail("fgcz-s-023", "/q/output/ts-out.x")
+    assert dq.log_deleted(e.value)
+    assert not dq.log_deleted(dq.QueueError("Could not connect to fgcz-s-023"))
+
+
+def test_already_removed_is_recognised():
+    assert dq.already_removed(
+        dq.QueueError("draugr-queue: Job k4 has already been removed")
+    )
+    assert not dq.already_removed(
+        dq.QueueError("draugr-queue: Job k4 has already finished")
+    )
+
+
+def test_exit_codes_name_the_failures_before_draugr():
+    assert "before draugr started" in dq.EXIT_CODES[98]
+    assert "failed or was removed" in dq.EXIT_CODES[99]
+    # Jobs stopped before draugr's fix ended with -113 and stay in the history.
+    assert dq.EXIT_CODES[-113] == dq.EXIT_CODES[-1] == "killed"
 
 
 def test_status_is_parsed_and_annotated(ssh):
@@ -155,6 +182,7 @@ def test_stopped_goes_by_the_exit_code(state):
     assert dq.was_stopped(past["k3"])
     # Finished on its own just as it was stopped: its real exit code counts.
     assert not dq.was_stopped({"exit_code": 0, "stopped_by": "falkonoe"})
+    assert dq.was_stopped({"exit_code": -113, "stopped_by": "falkonoe"})
 
 
 def test_find_searches_current_lost_and_past(state):

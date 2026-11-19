@@ -130,7 +130,8 @@ command line and this app all submit to it through draugr's `draugr-queue` comma
 must be deployed in `/export/local/analyses/draugr_exec` on each server; until it is, every call
 fails and the app shows the error. The app runs it as `illumina@<server>` over ssh and calls uv
 by its full path, because a non-interactive ssh session has no `module` command (bump `UV`
-together with the servers' `Dev/uv` module). The app keeps no record of its own jobs. The queue
+together with the servers' `Dev/uv` module). It passes `uv run --frozen --no-sync`: all servers
+share one draugr checkout and `.venv`, which only the deployment syncs. The app keeps no record of its own jobs. The queue
 and its history (`/export/local/analyses/draugr_tsp/history.jsonl` on the server) are the record.
 
 The remote command is built as a list and quoted once with `shlex.join`, and ssh runs without
@@ -141,20 +142,26 @@ shows that reason to the operator. ssh exits `255` when it cannot connect.
   and returns its tsp id
 - `status()` returns the server's `jobs`, `lost` and `history`, adds each job's orders and
   queue position, and joins the history events of ended jobs on their `key`
-- `remove()` takes a queued job off the queue or clears a lost one
+- `remove()` takes a queued job off the queue or clears a lost one. If someone else removed or
+  cleared it after the last refresh, `draugr-queue` refuses ("has already been removed") and the
+  app says so instead of showing an error
 - `stop()` kills the running job, draugr and bcl-convert included (`--by <login>`)
-- `log_tail()` returns the end of a job's console output (draugr's stdout/stderr)
+- `log_tail()` returns the end of a job's console output (draugr's stdout/stderr). draugr
+  deletes job logs after 60 days, so for an older job the Log dialog says the log was deleted
 
 Jobs are identified by `key`, because tsp ids restart when the server reboots. The Queue tab,
 the Run after dropdown and the Demultiplexing status only poll the run's own server.
 
 A job submitted `--after` other jobs (tsp ids on the same server) runs draugr only if each of
-them succeeded. Otherwise it ends with exit code `99`, which in turn counts as a failure for
+them succeeded. If one of them failed or was removed, it ends with exit code `99`, which in turn counts as a failure for
 any job chained after it.
 
 A finished job's exit code is `0` if it succeeded, `1` if draugr failed, `2` if draugr rejected
-its arguments, `99` if it was not run because a job it waited for failed, and `-1` if it was
-killed. A job with exit code `-1` and a `stopped` history event is shown as stopped, with who
+its arguments, `98` if its job script failed before draugr started (`module load` or the
+on-start step; see the job log), `99` if it was not run because a job it waited for failed or
+was removed, and `-1` if it was killed. Jobs stopped before draugr's fix for this ended with
+`-113`, which is also shown as killed. A job with exit code `-1` (or `-113`) and a `stopped`
+history event is shown as stopped, with who
 stopped it. A stopped job may leave partial output, and its run's B-Fabric status stays at
 demultiplexing. If the job ends before the stop reaches it, the app says so instead of showing
 an error.

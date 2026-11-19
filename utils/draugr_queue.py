@@ -24,14 +24,18 @@ DRAUGR_DIR = "/export/local/analyses/draugr_exec"
 DATA_DIR = "/export/local/data"
 # How much of a job's console output the Log dialog shows.
 LOG_TAIL_LINES = 200
+# draugr deletes job logs older than this (LOG_RETENTION_DAYS in draugr-queue).
+LOG_RETENTION_DAYS = 60
 
 # What a finished job's exit code means.
 EXIT_CODES = {
     0: "succeeded",
     1: "draugr failed",
     2: "draugr rejected its arguments",
-    99: "not run: a job it waited for failed",
+    98: "failed before draugr started (see the job log)",  # module load or the on-start step
+    99: "not run: a job it waited for failed or was removed",
     -1: "killed",  # draugr-queue stop, or tsp -k on the server
+    -113: "killed",  # how jobs stopped before draugr's fix ended; they stay in the history
 }
 
 
@@ -72,7 +76,16 @@ def _ssh(server, remote, timeout):
 def _draugr_queue(server, *args, timeout=60):
     return _ssh(
         server,
-        [UV, "run", "--frozen", "--directory", DRAUGR_DIR, "draugr-queue", *args],
+        [
+            UV,
+            "run",
+            "--frozen",
+            "--no-sync",
+            "--directory",
+            DRAUGR_DIR,
+            "draugr-queue",
+            *args,
+        ],
         timeout,
     )
 
@@ -134,6 +147,16 @@ def stop(server, key, by):
 def not_running(error):
     """Whether a stop was refused only because the job had already ended."""
     return "is not running" in str(error)
+
+
+def already_removed(error):
+    """Whether a remove was refused only because the job had already been removed."""
+    return "has already been removed" in str(error)
+
+
+def log_deleted(error):
+    """Whether a log could not be read only because draugr had deleted it."""
+    return "No such file or directory" in str(error)
 
 
 def log_tail(server, log, lines=LOG_TAIL_LINES):
@@ -213,7 +236,7 @@ def was_stopped(job):
     Goes by the exit code: a job that finished on its own just as it was
     stopped has a stopped event but its real exit code.
     """
-    return job.get("exit_code") == -1 and bool(job.get("stopped_by"))
+    return job.get("exit_code") in (-1, -113) and bool(job.get("stopped_by"))
 
 
 def find(state, key):
