@@ -48,7 +48,9 @@ def _ssh(server, remote, timeout):
         f"illumina@{server}", shlex.join(remote),
     ]  # fmt: skip
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+        result = subprocess.run(
+            argv, capture_output=True, text=True, errors="replace", timeout=timeout, check=False
+        )
     except subprocess.TimeoutExpired:
         raise QueueError(f"{server} did not answer within {timeout} s.") from None
     except OSError as e:

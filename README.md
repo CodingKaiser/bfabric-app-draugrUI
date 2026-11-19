@@ -181,7 +181,7 @@ Fetches run-specific data from B-Fabric that the framework's generic entity read
 Run → RunUnit → RunUnitLane → Sample → Container
 ```
 
-Returns the lane-to-container mapping, server location, and data folder name needed to populate the UI and build the Draugr SSH command.
+Returns the lane-to-container mapping, server location, and data folder name needed to populate the UI and queue the run with `draugr-queue`.
 
 ## Setup
 
