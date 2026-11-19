@@ -932,13 +932,26 @@ def run_queue_action(n_clicks, target, token_data, run_data, queue_version):
                 # The new job is queued; only clearing the old entry failed.
                 # Saying "could not requeue" here would invite a second, duplicate run.
                 severity = "warning"
-                message = (
-                    f"Queued the lost {label} again as job {tsp_id}, but could not clear the "
-                    f"lost entry ({e}). Use Clear on it; do not queue it again."
-                )
+                if draugr_queue.already_removed(e):
+                    message = (
+                        f"Queued the lost {label} again as job {tsp_id}, but someone else had already "
+                        "cleared the lost entry. Check on the Queue tab that it was not queued twice."
+                    )
+                else:
+                    message = (
+                        f"Queued the lost {label} again as job {tsp_id}, but could not clear the "
+                        f"lost entry ({e}). Use Clear on it; do not queue it again."
+                    )
         else:  # remove, clear
-            draugr_queue.remove(server, key)
-            message, params = f"{'Removed' if action == 'remove' else 'Cleared'} the {label}.", {}
+            done = "Removed" if action == "remove" else "Cleared"
+            try:
+                draugr_queue.remove(server, key)
+            except draugr_queue.QueueError as e:
+                # Someone else removed or cleared it after the last refresh: not an error.
+                if draugr_queue.already_removed(e):
+                    return _banner(f"The {label} had already been {done.lower()}.", "info"), refreshed
+                raise
+            message, params = f"{done} the {label}.", {}
     except draugr_queue.QueueError as e:
         return _banner(f"Could not {action} the job: {e}", "error"), refreshed
 
