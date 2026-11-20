@@ -195,6 +195,8 @@ registration_sidebar = [
 
 # ==================== Queue ====================
 
+_LEFT = {"textAlign": "left"}  # .bf-stats centres cells
+
 
 def _pill(text, kind):
     return html.Span(text, className=f"bf-pill bf-pill--{kind}")
@@ -246,7 +248,10 @@ def _log_button(job):
 
 def _table(header, rows):
     return html.Table(
-        [html.Thead(html.Tr([html.Th(h) for h in header])), html.Tbody(rows)],
+        [
+            html.Thead(html.Tr([html.Th(h, style=_LEFT) for h in header])),
+            html.Tbody(rows),
+        ],
         className="bf-stats",
     )
 
@@ -255,7 +260,7 @@ def _row(job, run_folder, cells):
     style = (
         {"background": "rgba(234, 107, 19, 0.08)"} if job["run"] == run_folder else {}
     )
-    return html.Tr([html.Td(cell) for cell in cells], style=style)
+    return html.Tr([html.Td(cell, style=_LEFT) for cell in cells], style=style)
 
 
 def _panel(title, body, colour=None):
@@ -328,7 +333,7 @@ def _outcome(job):
 
 
 def _past_row(job):
-    return html.Tr([html.Td(cell) for cell in [
+    return html.Tr([html.Td(cell, style=_LEFT) for cell in [
         job.get("tsp_id", "—"), _outcome(job), _orders(job), job.get("source") or "—",
         job.get("submitter") or "—", _when(job.get("submitted_at")), _when(job.get("started_at")),
         _when(job.get("finished_at")), _parameters(job), _log_button(job),
@@ -413,9 +418,6 @@ _REGISTRATION_STATUS_PILL = {
     registration_status.DEMUXING: "info",
     registration_status.NOT_DEMUXED: "none",
 }
-
-
-_LEFT = {"textAlign": "left"}  # .bf-stats centres cells
 
 
 def registration_status_table(rows, order_names, dataset_url):
