@@ -76,8 +76,6 @@ def build_draugr_args(
         "/home/illumina/bfabric_cred/.bfabricpy.yml",
         "--analysis-folder",
         "/export/local/analyses",
-        "--logger-rep",
-        "/srv/GT/analysis/falkonoe/dmx_logs/prod",
         "--scripts-destination",
         "/srv/GT/analysis/datasets",
     ]
