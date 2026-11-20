@@ -120,6 +120,8 @@ longer pulls it in.
 - `build_draugr_args()` returns draugr's arguments for the flags selected in the UI, one argv
   element per argument. It leaves out `--run-folder`, which draugr-queue takes itself, and does
   no shell quoting: `draugr_queue` quotes the whole remote command once for the ssh hop.
+  It passes no `--logger-rep`, so the instrument servers must run draugr 3.0.1 or later,
+  which logs to the production log folder by default.
 - `generate_registration_command()` checks where the run's dataset file lives on `fgcz-h-082`, then builds two SSH commands: one to `grep` the selected orders into a registration bash script and one to execute that script
 
 ### `utils/draugr_queue.py`
