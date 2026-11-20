@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -174,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "bfabric"
-version = "1.22.0"
+version = "1.24.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -191,9 +191,9 @@ dependencies = [
     { name = "rich" },
     { name = "suds" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/28/acd7544b2417d53ebb269257307325474f74b260fd65c038c2dbfe72ba85/bfabric-1.22.0.tar.gz", hash = "sha256:154ce7fab1daf84843df3cbdf8c57b66786eae6edb819ad3c83f7bdc4041e073", size = 192034, upload-time = "2026-08-25T14:52:00.93Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/9a/cee6bc37881481cd93e0f762e4de2471b06004469f86fbbe17775f7792a8/bfabric-1.24.2.tar.gz", hash = "sha256:352c2cf54934953e0fc50207c5bfa51bce2a81221e994f94d7f4cf352ec0ee65", size = 211048, upload-time = "2026-11-18T11:14:07.576Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/81/f424d7a02807c54f80bcdfb9e8a5de3800d712ddd8a9515c1019760a334b/bfabric-1.22.0-py3-none-any.whl", hash = "sha256:e4769c1dcc5c2125fc4901ddb73407e29ff4ede320d16350ef9638aae06a6c79", size = 167000, upload-time = "2026-08-25T14:51:59.35Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/6e/b96aab235fc105274d7f8eb869543e7f9192c3ea99bbdea1a6a1a5f7ab55/bfabric-1.24.2-py3-none-any.whl", hash = "sha256:6c53e5f1c61d108ba109225be4926d2333d27babf8dd8fc29e76efe075fabf57", size = 182885, upload-time = "2026-11-18T11:14:05.904Z" },
 ]
 
 [package.optional-dependencies]
@@ -203,7 +203,7 @@ transfer = [
 
 [[package]]
 name = "bfabric-scripts"
-version = "1.17.0"
+version = "1.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bfabric", extra = ["transfer"] },
@@ -214,14 +214,14 @@ dependencies = [
     { name = "rich" },
     { name = "xmltodict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/5d/4e0bc74c362439b5d44f51f5588a0bb2b19ee90dc039a87ac00170f33306/bfabric_scripts-1.17.0.tar.gz", hash = "sha256:9a78551ac60185ece070fd720f956c88c4e3534dcdba0630eb6b33579e768e17", size = 70945, upload-time = "2026-08-20T10:21:15.993Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/2f/dcdcd5dd142f764ab240ec6df54f38727f19b2bcb4bb16f8bdc6977e9473/bfabric_scripts-1.19.1.tar.gz", hash = "sha256:25bfe2ee158ff8902c37e5d38b1fe7b9eb7b0a5757753dd73302b2f65c3fc21b", size = 77722, upload-time = "2026-11-10T10:21:32.724Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/30/205dd5cf8add74376d31d7f6c466f08149542bd2d9fcdd6e833098e94a24/bfabric_scripts-1.17.0-py3-none-any.whl", hash = "sha256:2799f7c766c144407e758aa0248de55a86fdcbc49ac45d487b86ea3760118c12", size = 103508, upload-time = "2026-08-20T10:21:14.715Z" },
+    { url = "https://files.pythonhosted.org/packages/25/42/31f1da3521b1bb68ae96108eebcb1104eff42842842043b307e513fb34d6/bfabric_scripts-1.19.1-py3-none-any.whl", hash = "sha256:eec03b27a7c52ee3b5df3122bfdd166a13d5a9924963ebe26b5e5643ced454e5", size = 111644, upload-time = "2026-11-10T10:21:31.355Z" },
 ]
 
 [[package]]
 name = "bfabric-web-apps"
-version = "0.9.8"
+version = "0.14.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -237,9 +237,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "rq" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/7d/2293357ee9730fb5dd8e329b941174c4cfff2cb890124790786dc3651318/bfabric_web_apps-0.9.8.tar.gz", hash = "sha256:328290899ff6bb0676550132d6478190a76eab972421c67831e078cd8d591e1b", size = 1227436, upload-time = "2026-08-21T08:51:50.422Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/3b/e3b2c253bfd99d465a1aa539d595a85659cd5f306961da2ec5efd5eced1e/bfabric_web_apps-0.14.3.tar.gz", hash = "sha256:2b5af62a5b6b226f92c9e2d96d41f6bc74b10d13831d098f89841eb1280bb759", size = 1254771, upload-time = "2026-11-20T10:10:35.67Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/33/cf6df5e912d59bdbbe3e005087b790ccab2e390c29443c3c4a41147a2c57/bfabric_web_apps-0.9.8-py3-none-any.whl", hash = "sha256:59bc3ff97a33258fda8556240ebe496cadd35f54a0906e860611a51653609b06", size = 81568, upload-time = "2026-08-21T08:51:48.582Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/dd/7b3faf944ccf1514f58f28c44b4e4e6a5737ff55c65e50c4fa60bd42b236/bfabric_web_apps-0.14.3-py3-none-any.whl", hash = "sha256:c376b896b2888c238a6ad79aa4247e10883a372abf2d86f6d16d42208df032b5", size = 93524, upload-time = "2026-11-20T10:10:33.849Z" },
 ]
 
 [[package]]
@@ -658,7 +658,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bfabric-web-apps", specifier = ">=0.9.8,<0.11.2" },
+    { name = "bfabric-web-apps", specifier = ">=0.14.3" },
     { name = "dash", specifier = ">=4.0.0,<5.0.0" },
     { name = "dash-bootstrap-components", specifier = ">=2.0.0,<3.0.0" },
 ]
