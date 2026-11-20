@@ -11,6 +11,8 @@ def test_defaults_only_reprocess_the_orders():
     args = build_draugr_args(order_list=[12345, 12399])
     # draugr-queue takes the run folder itself and refuses it among draugr's arguments.
     assert not any(a.startswith("--run-folder") for a in args)
+    # draugr (>= 3.0.1) logs to the production log folder by default.
+    assert not any(a.startswith("--logger-rep") for a in args)
     assert args[-2:] == ["--reprocess-orders", "12345,12399"]
     assert not any(a.startswith("--skip") or a == "-xq" for a in args)
 
