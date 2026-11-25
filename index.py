@@ -816,9 +816,9 @@ def toggle_queue_refresh(active_tab):
         Input("work-tabs", "active_tab"),
         Input("queue-version", "data"),
     ],
-    State("run_data", "data"),
+    [State("run_data", "data"), State("queue-params-open", "data")],
 )
-def refresh_queue(_n_intervals, active_tab, _version, run_data):
+def refresh_queue(_n_intervals, active_tab, _version, run_data, open_keys):
     if active_tab != "queue":
         return no_update
     if not run_data or not run_data.get("server"):
@@ -832,7 +832,25 @@ def refresh_queue(_n_intervals, active_tab, _version, run_data):
         return make_banner(
             f"Could not read the draugr queue on {run_data['server']}: {e}", "error"
         )
-    return queue_view(state, run_data.get("datafolder"))
+    return queue_view(state, run_data.get("datafolder"), open_keys or [])
+
+
+@app.callback(
+    Output("queue-params-open", "data"),
+    Input({"type": "queue-params", "key": ALL}, "n_clicks"),
+    State("queue-params-open", "data"),
+    prevent_initial_call=True,
+)
+def remember_open_params(_clicks, open_keys):
+    """Note which jobs' parameters are open, so the 15 s refresh does not close them."""
+    # A refresh renders the summaries anew, which fires this without a click.
+    if not ctx.triggered or not ctx.triggered[0]["value"]:
+        return no_update
+    key = ctx.triggered_id["key"]
+    open_keys = open_keys or []
+    if key in open_keys:
+        return [k for k in open_keys if k != key]
+    return open_keys + [key]
 
 
 def _queue_action_dialog(action, job):
