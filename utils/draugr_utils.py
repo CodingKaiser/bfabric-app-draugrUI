@@ -38,6 +38,14 @@ def _format_flag_value(value):
     return stripped
 
 
+# Fixed paths build_draugr_args passes on every run; the UI shows them muted.
+FIXED_ARGS = {
+    "--login-config": "/home/illumina/bfabric_cred/.bfabricpy.yml",
+    "--analysis-folder": "/export/local/analyses",
+    "--scripts-destination": "/srv/GT/analysis/datasets",
+}
+
+
 def build_draugr_args(
     order_list,
     skip_gstore=False,
@@ -71,14 +79,7 @@ def build_draugr_args(
     Returns:
         list[str]: draugr's argv, one element per argument.
     """
-    args = [
-        "--login-config",
-        "/home/illumina/bfabric_cred/.bfabricpy.yml",
-        "--analysis-folder",
-        "/export/local/analyses",
-        "--scripts-destination",
-        "/srv/GT/analysis/datasets",
-    ]
+    args = [arg for pair in FIXED_ARGS.items() for arg in pair]
 
     if skip_gstore:
         args.append("--skip-gstore-copy")

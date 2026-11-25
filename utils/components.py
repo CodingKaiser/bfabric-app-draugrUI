@@ -19,7 +19,7 @@ import shlex
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-from utils import draugr_queue, registration_status
+from utils import draugr_queue, draugr_utils, registration_status
 
 # ==================== Lane Cards ====================
 
@@ -210,19 +210,38 @@ def _orders(job):
     return ", ".join(job["orders"]) if job["orders"] else "all"
 
 
-def _parameters(job):
+def _parameter_parts(args):
+    """The shell-quoted args, with each fixed path flag and its value muted."""
+    parts, i = [], 0
+    while i < len(args):
+        if args[i] in draugr_utils.FIXED_ARGS:
+            parts.append(html.Span(shlex.join(args[i : i + 2]), className="bf-muted"))
+            i += 2
+        else:
+            parts.append(shlex.quote(args[i]))
+            i += 1
+    # A space between parts, as shlex.join would put between args.
+    return [p for j, part in enumerate(parts) for p in ([" "] if j else []) + [part]]
+
+
+def _parameters(job, open_keys):
+    """The job's draugr args, open if the user had them open before the last refresh."""
+    # The id keys the element by job (Dash uses it as the React key), so a row
+    # that now shows another job never inherits the previous one's open state.
     return html.Details(
-        [
-            html.Summary("show"),
+        id={"type": "queue-params-details", "key": job["key"]},
+        open=job["key"] in open_keys,
+        children=[
+            html.Summary("show", id={"type": "queue-params", "key": job["key"]}),
             html.Pre(
-                shlex.join(job.get("draugr_args") or []),
+                _parameter_parts(job.get("draugr_args") or []),
                 style={
                     "whiteSpace": "pre-wrap",
                     "textAlign": "left",
                     "maxWidth": "40vw",
                 },
             ),
-        ]
+        ],
     )
 
 
@@ -286,7 +305,7 @@ def _current_state(job):
     ]
 
 
-def _current_row(job, run_folder):
+def _current_row(job, run_folder, open_keys):
     after = ", ".join(str(a["tsp_id"]) for a in job.get("after") or []) or "—"
     actions = [_log_button(job)]
     if job["state"] == "queued":
@@ -295,11 +314,11 @@ def _current_row(job, run_folder):
         actions.append(_action("Stop", "stop", job, danger=True))
     return _row(job, run_folder, [
         job["tsp_id"], _current_state(job), job["run"], _orders(job), job.get("source") or "—",
-        job.get("submitter") or "—", _when(job.get("submitted_at")), after, _parameters(job), actions,
+        job.get("submitter") or "—", _when(job.get("submitted_at")), after, _parameters(job, open_keys), actions,
     ])  # fmt: skip
 
 
-def _lost_row(job, run_folder):
+def _lost_row(job, run_folder, open_keys):
     if job.get("interrupted"):
         was = [
             _pill("interrupted", "fail"),
@@ -312,7 +331,7 @@ def _lost_row(job, run_folder):
         ]
     return _row(job, run_folder, [
         job["tsp_id"], was, job["run"], _orders(job), job.get("submitter") or "—",
-        _when(job.get("submitted_at")), _parameters(job),
+        _when(job.get("submitted_at")), _parameters(job, open_keys),
         [_action("Queue again", "requeue", job), _action("Clear", "clear", job, danger=True)],
     ])  # fmt: skip
 
@@ -332,11 +351,11 @@ def _outcome(job):
             html.Div(text if code == 0 else f"{text} ({code})", className="bf-muted")]  # fmt: skip
 
 
-def _past_row(job):
+def _past_row(job, open_keys):
     return html.Tr([html.Td(cell, style=_LEFT) for cell in [
         job.get("tsp_id", "—"), _outcome(job), _orders(job), job.get("source") or "—",
         job.get("submitter") or "—", _when(job.get("submitted_at")), _when(job.get("started_at")),
-        _when(job.get("finished_at")), _parameters(job), _log_button(job),
+        _when(job.get("finished_at")), _parameters(job, open_keys), _log_button(job),
     ]])  # fmt: skip
 
 
@@ -357,15 +376,19 @@ def _held_up_by(active, run_folder):
     )  # fmt: skip
 
 
-def queue_view(state, run_folder):
-    """The server's lost jobs (if any), its current queue, then the jobs that ended."""
+def queue_view(state, run_folder, open_keys=()):
+    """
+    The server's lost jobs (if any), its current queue, then the jobs that ended.
+
+    open_keys are the jobs whose parameters stay open across refreshes.
+    """
     panels = []
     if state["lost"]:
         panels.append(_panel(
             "Lost jobs: the server dropped these without finishing them (e.g. on a reboot)",
             _table(
                 ["Job", "Was", "Run", "Orders", "Submitted by", "Submitted", "Parameters", ""],
-                [_lost_row(job, run_folder) for job in state["lost"]],
+                [_lost_row(job, run_folder, open_keys) for job in state["lost"]],
             ),
             colour="var(--bf-danger, #c0392b)",
         ))  # fmt: skip
@@ -377,18 +400,25 @@ def queue_view(state, run_folder):
             _held_up_by(active, run_folder),
             _table(
                 ["Job", "State", "Run", "Orders", "Source", "Submitted by", "Submitted", "After", "Parameters", ""],
-                [_current_row(job, run_folder) for job in active],
+                [_current_row(job, run_folder, open_keys) for job in active],
             ) if active else html.P("No draugr jobs are queued or running.", className="bf-muted"),
         ],
     ))  # fmt: skip
 
-    past = [job for job in state["past"] if job["run"] == run_folder]
+    # A job that ends between the server reading its queue and its history is
+    # in both; show it once, among the active ones, so no id is duplicated.
+    shown = {job["key"] for job in state["lost"] + active}
+    past = [
+        job
+        for job in state["past"]
+        if job["run"] == run_folder and job["key"] not in shown
+    ]
     panels.append(_panel(
         "Ended for this run",
         _table(
             ["Job", "Outcome", "Orders", "Source", "Submitted by", "Submitted", "Started",
              "Ended", "Parameters", ""],
-            [_past_row(job) for job in past],
+            [_past_row(job, open_keys) for job in past],
         ) if past else html.P("None recently.", className="bf-muted"),
     ))  # fmt: skip
     return panels
@@ -404,6 +434,7 @@ queue_pane = html.Div(
         ),
         dcc.Interval(id="queue-interval", interval=15_000, disabled=True),
         dcc.Store(id="queue-action-target"),
+        dcc.Store(id="queue-params-open", data=[]),
         html.Div(id="queue-display"),
     ],
 )
