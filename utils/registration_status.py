@@ -9,7 +9,11 @@ An order moves through these states:
   Submitted          submitted from this app recently and still not registered.
                      Registration is asynchronous, and submitting again in the
                      meantime registers a duplicate dataset
-  Registered         B-Fabric holds a dataset for the order and the run
+  Registered         B-Fabric holds a dataset for the order and the run. If the
+                     script dates the order's delivery (draugr 3.1+), the
+                     dataset must have been created after it: a re-demultiplexed
+                     order is delivered to a new gStore folder, and the dataset
+                     of the earlier delivery stays in B-Fabric
 
 An order with a queued or running draugr job shows as being demultiplexed
 instead, whatever its state before. A job without --reprocess-orders (a full
@@ -33,6 +37,8 @@ DATASETS_DIR = Path("/srv/GT/analysis/datasets")
 # Where draugr writes the script (ISeq for QC runs), and where it moves itself.
 SCRIPT_DIRS = [DATASETS_DIR, DATASETS_DIR / "ISeq", DATASETS_DIR / "processed"]
 SUBMITTED_WINDOW = timedelta(hours=1)
+# draugr's per-execution delivery timestamp, in local time like B-Fabric's dataset dates.
+DELIVERY_FORMAT = "%Y-%m-%d--%H-%M-%S"
 # Where the app notes its BF registration submissions, for the Submitted status.
 STATE_DIR = Path(os.environ.get("DRAUGRUI_STATE_DIR", "/srv/GT/analysis/draugrUI"))
 
@@ -62,18 +68,44 @@ def demuxed_orders(script_text, run_name):
     return orders
 
 
-def matching_dataset(datasets, order_id, run_name):
+def delivery_times(script_text, run_name):
     """
-    The B-Fabric dataset registered for this order and run, if any.
+    Order id -> when draugr demultiplexed the order's current delivery.
+
+    draugr 3.1+ ends each order's --run_alias with that execution's timestamp,
+    o<order>_<RUN>_2026-11-27--10-15-42. Older scripts have --mango_run_name
+    o<order>_<RUN> instead, so their orders have no entry.
+    """
+    times = {}
+    for alias in re.findall(r"--run_alias (\S+)", script_text):
+        match = re.fullmatch(
+            rf"o(\d+)_{re.escape(run_name)}_(\d{{4}}-\d\d-\d\d--\d\d-\d\d-\d\d)", alias
+        )
+        if match:
+            times[match.group(1)] = datetime.strptime(match.group(2), DELIVERY_FORMAT)
+    return times
+
+
+def matching_dataset(datasets, order_id, run_name, delivered_at=None):
+    """
+    The newest B-Fabric dataset registered for this order and run, if any.
 
     Its name is the script's dataset name, o<order>_<instrument>_<date>_<RUN>,
     with the SUSHI dataset id appended, so match the pattern, not the exact name.
+    Every delivery of the order has that name, so with delivered_at, only a
+    dataset created after it belongs to the current delivery: BF registration
+    always follows demultiplexing.
     """
     pattern = re.compile(rf"o{order_id}_.*_{re.escape(run_name)}(_\d+)?")
-    for dataset in datasets:
-        if pattern.fullmatch(dataset.get("name", "")):
-            return dataset
-    return None
+    matches = [d for d in datasets if pattern.fullmatch(d.get("name", ""))]
+    if delivered_at:
+        matches = [
+            d
+            for d in matches
+            if d.get("created") and datetime.fromisoformat(d["created"]) >= delivered_at
+        ]
+    # B-Fabric dates are "YYYY-MM-DD HH:MM:SS", so they sort as text.
+    return max(matches, key=lambda d: d.get("created") or "", default=None)
 
 
 def record_submission(run_name, orders, submitter, state_dir=None):
@@ -113,7 +145,7 @@ def recent_submissions(run_name, now=None, state_dir=None):
 
 
 def derive_statuses(
-    orders, run_name, demuxed, datasets_by_order, submissions, demuxing
+    orders, run_name, demuxed, datasets_by_order, submissions, demuxing, delivered=None
 ):
     """
     One status row per order. Pure, so it can be tested without B-Fabric or files.
@@ -124,10 +156,15 @@ def derive_statuses(
         datasets_by_order: order id -> B-Fabric datasets in that order's container.
         submissions: order id -> time it was last submitted for BF registration from the app.
         demuxing: order ids in a queued or running draugr job.
+        delivered: order id -> when its current delivery was demultiplexed, for
+            orders the script dates (draugr 3.1+).
     """
+    delivered = delivered or {}
     rows = []
     for order in (str(o) for o in orders):
-        dataset = matching_dataset(datasets_by_order.get(order, []), order, run_name)
+        dataset = matching_dataset(
+            datasets_by_order.get(order, []), order, run_name, delivered.get(order)
+        )
         if order in demuxing:
             status = DEMUXING
         elif dataset:
@@ -186,7 +223,8 @@ def order_statuses(token_data, run_name, run_folder, orders, queue_state):
     queue_state is the server's draugr_queue.status(), or None if it could not be read.
     """
     script = find_registration_script(run_name)
-    demuxed = demuxed_orders(script.read_text(), run_name) if script else set()
+    script_text = script.read_text() if script else ""
+    demuxed = demuxed_orders(script_text, run_name)
     demuxing = (
         demuxing_orders(queue_state, run_folder, orders) if queue_state else set()
     )
@@ -197,4 +235,5 @@ def order_statuses(token_data, run_name, run_folder, orders, queue_state):
         fetch_datasets(token_data, orders),
         recent_submissions(run_name),
         demuxing,
+        delivery_times(script_text, run_name),
     )

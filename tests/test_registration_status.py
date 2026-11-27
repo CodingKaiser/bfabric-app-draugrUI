@@ -102,3 +102,67 @@ def test_demuxing_orders_counts_a_full_run_for_every_order():
     state["jobs"][0]["orders"] = None  # a full run, e.g. the automatic one
     assert ss.demuxing_orders(state, "R", [1, 2, 3]) == {"1", "2", "3"}
     assert ss.demuxing_orders(state, "other", [1, 2, 3]) == set()
+
+
+# draugr 3.1+: each delivery has its own gStore folder, dated in --run_alias.
+# 12345 kept its delivery from 20 Nov; 12399 was reprocessed on 27 Nov. It mixes
+# sample types, so draugr also wrote an o12399-10X block, which has the same date.
+DELIVERED_12345 = datetime(2026, 11, 20, 8, 0, 0)
+DELIVERED_12399 = datetime(2026, 11, 27, 10, 15, 42)
+
+
+def test_delivery_times_from_the_run_alias():
+    text = (FIXTURES / "X580_sushification.sh").read_text()
+    assert ss.demuxed_orders(text, "X580") == {"12345", "12399"}
+    assert ss.delivery_times(text, "X580") == {
+        "12345": DELIVERED_12345,
+        "12399": DELIVERED_12399,
+    }
+    assert ss.delivery_times(text, "X58") == {}
+
+
+def test_pre_3_1_script_has_no_delivery_times():
+    text = (FIXTURES / "X570_sushification.sh").read_text()
+    assert ss.delivery_times(text, "X570") == {}
+
+
+def _x580_statuses(datasets_by_order):
+    text = (FIXTURES / "X580_sushification.sh").read_text()
+    return ss.derive_statuses(
+        orders=[12345, 12399],
+        run_name="X580",
+        demuxed=ss.demuxed_orders(text, "X580"),
+        datasets_by_order=datasets_by_order,
+        submissions={},
+        demuxing=set(),
+        delivered=ss.delivery_times(text, "X580"),
+    )
+
+
+def test_redemultiplexed_order_with_only_an_older_dataset_is_ready():
+    rows = _x580_statuses({
+        "12345": [{"id": 1, "name": "o12345_NovaSeq_261120_X580_101", "created": "2026-11-20 14:00:00"}],
+        "12399": [{"id": 2, "name": "o12399_NovaSeq_261120_X580_102", "created": "2026-11-20 14:00:05"}],
+    })  # fmt: skip
+    assert [r["status"] for r in rows] == [ss.REGISTERED, ss.READY]
+    assert rows[1]["dataset_id"] is None
+
+
+def test_dataset_created_after_the_delivery_is_registered():
+    rows = _x580_statuses({
+        "12399": [
+            {"id": 2, "name": "o12399_NovaSeq_261120_X580_102", "created": "2026-11-20 14:00:05"},
+            {"id": 3, "name": "o12399_NovaSeq_261120_X580_103", "created": "2026-11-27 11:02:00"},
+        ],
+    })  # fmt: skip
+    assert [r["status"] for r in rows] == [ss.READY, ss.REGISTERED]
+    assert rows[1]["dataset_id"] == 3
+
+
+def test_the_newest_matching_dataset_is_linked():
+    datasets = [
+        {"id": 3, "name": "o12399_NovaSeq_261120_X580_103", "created": "2026-11-27 11:02:00"},
+        {"id": 2, "name": "o12399_NovaSeq_261120_X580_102", "created": "2026-11-20 14:00:05"},
+    ]  # fmt: skip
+    assert ss.matching_dataset(datasets, "12399", "X580")["id"] == 3
+    assert ss.matching_dataset(datasets[::-1], "12399", "X580")["id"] == 3
