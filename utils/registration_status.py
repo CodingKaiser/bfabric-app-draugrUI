@@ -9,11 +9,11 @@ An order moves through these states:
   Submitted          submitted from this app recently and still not registered.
                      Registration is asynchronous, and submitting again in the
                      meantime registers a duplicate dataset
-  Registered         B-Fabric holds a dataset for the order and the run. If the
-                     script dates the order's delivery (draugr 3.1+), the
-                     dataset must have been created after it: a re-demultiplexed
-                     order is delivered to a new gStore folder, and the dataset
-                     of the earlier delivery stays in B-Fabric
+  Registered         B-Fabric holds a dataset for the order and the run. When
+                     the script dates the order's delivery (draugr 3.1+), only
+                     a dataset created since then counts: re-demultiplexing
+                     delivers to a new gStore folder and leaves the earlier
+                     delivery's dataset in B-Fabric
 
 An order with a queued or running draugr job shows as being demultiplexed
 instead, whatever its state before. A job without --reprocess-orders (a full
@@ -37,7 +37,7 @@ DATASETS_DIR = Path("/srv/GT/analysis/datasets")
 # Where draugr writes the script (ISeq for QC runs), and where it moves itself.
 SCRIPT_DIRS = [DATASETS_DIR, DATASETS_DIR / "ISeq", DATASETS_DIR / "processed"]
 SUBMITTED_WINDOW = timedelta(hours=1)
-# draugr's per-execution delivery timestamp, in local time like B-Fabric's dataset dates.
+# draugr's delivery timestamp, one per execution, in local time like B-Fabric's dataset dates.
 DELIVERY_FORMAT = "%Y-%m-%d--%H-%M-%S"
 # Where the app notes its BF registration submissions, for the Submitted status.
 STATE_DIR = Path(os.environ.get("DRAUGRUI_STATE_DIR", "/srv/GT/analysis/draugrUI"))
@@ -70,11 +70,11 @@ def demuxed_orders(script_text, run_name):
 
 def delivery_times(script_text, run_name):
     """
-    Order id -> when draugr demultiplexed the order's current delivery.
+    Order id -> when draugr started demultiplexing the order's current delivery.
 
     draugr 3.1+ ends each order's --run_alias with that execution's timestamp,
-    o<order>_<RUN>_2026-11-27--10-15-42. Older scripts have --mango_run_name
-    o<order>_<RUN> instead, so their orders have no entry.
+    as in o<order>_<RUN>_2026-11-27--10-15-42. Older scripts have
+    --mango_run_name o<order>_<RUN> instead and give their orders no entry.
     """
     times = {}
     for alias in re.findall(r"--run_alias (\S+)", script_text):
@@ -92,9 +92,9 @@ def matching_dataset(datasets, order_id, run_name, delivered_at=None):
 
     Its name is the script's dataset name, o<order>_<instrument>_<date>_<RUN>,
     with the SUSHI dataset id appended, so match the pattern, not the exact name.
-    Every delivery of the order has that name, so with delivered_at, only a
-    dataset created after it belongs to the current delivery: BF registration
-    always follows demultiplexing.
+    Every delivery of the order gets that name. Given delivered_at, only a
+    dataset created at or after it counts, since BF registration of a delivery
+    comes after its demultiplexing.
     """
     pattern = re.compile(rf"o{order_id}_.*_{re.escape(run_name)}(_\d+)?")
     matches = [d for d in datasets if pattern.fullmatch(d.get("name", ""))]
@@ -156,8 +156,8 @@ def derive_statuses(
         datasets_by_order: order id -> B-Fabric datasets in that order's container.
         submissions: order id -> time it was last submitted for BF registration from the app.
         demuxing: order ids in a queued or running draugr job.
-        delivered: order id -> when its current delivery was demultiplexed, for
-            orders the script dates (draugr 3.1+).
+        delivered: order id -> when demultiplexing of its current delivery
+            started, for orders the script dates (draugr 3.1+).
     """
     delivered = delivered or {}
     rows = []

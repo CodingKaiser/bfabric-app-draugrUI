@@ -104,9 +104,9 @@ def test_demuxing_orders_counts_a_full_run_for_every_order():
     assert ss.demuxing_orders(state, "other", [1, 2, 3]) == set()
 
 
-# draugr 3.1+: each delivery has its own gStore folder, dated in --run_alias.
-# 12345 kept its delivery from 20 Nov; 12399 was reprocessed on 27 Nov. It mixes
-# sample types, so draugr also wrote an o12399-10X block, which has the same date.
+# draugr 3.1+ gives each delivery its own gStore folder and dates it in --run_alias.
+# 12345 kept its delivery from 20 Nov, and 12399 was reprocessed on 27 Nov. 12399
+# mixes sample types, so the script also has an o12399-10X block with the same date.
 DELIVERED_12345 = datetime(2026, 11, 20, 8, 0, 0)
 DELIVERED_12399 = datetime(2026, 11, 27, 10, 15, 42)
 
